@@ -2,7 +2,17 @@ import { Injectable } from "@nestjs/common"
 
 @Injectable()
 export class AppService {
-  getHello(): string {
-    return "Hello World!"
+  getServiceInfo() {
+    return {
+      name: "radial-api",
+      version: "v1",
+      status: "ok",
+    }
+  }
+
+  getHealth() {
+    return {
+      status: "ok",
+    }
   }
 }
