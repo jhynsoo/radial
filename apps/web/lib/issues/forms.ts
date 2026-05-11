@@ -33,12 +33,26 @@ function parsePriority(value: string): number | null {
     return null
   }
 
+  if (!/^-?\d+$/.test(value)) {
+    throw new Error("Priority must be an integer.")
+  }
+
   const priority = Number(value)
   if (!Number.isInteger(priority)) {
     throw new Error("Priority must be an integer.")
   }
 
   return priority
+}
+
+function validateUrl(url: string): string {
+  try {
+    new URL(url)
+  } catch {
+    throw new Error("URL must be a valid URL.")
+  }
+
+  return url
 }
 
 export function parseIssueForm(formData: FormData): CreateIssueBody {
@@ -72,7 +86,7 @@ export function parseIssueForm(formData: FormData): CreateIssueBody {
     body.branch_name = branchName
   }
   if (url) {
-    body.url = url
+    body.url = validateUrl(url)
   }
 
   return body
@@ -87,14 +101,7 @@ export function parseLinkForm(formData: FormData): {
   title?: string
   type?: string
 } {
-  const url = required(formData, "url", "URL")
-
-  try {
-    new URL(url)
-  } catch {
-    throw new Error("URL must be a valid URL.")
-  }
-
+  const url = validateUrl(required(formData, "url", "URL"))
   const link: { url: string; title?: string; type?: string } = { url }
   const title = optionalText(formData, "title")
   const type = optionalText(formData, "type")

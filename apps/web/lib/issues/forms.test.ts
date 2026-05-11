@@ -50,6 +50,47 @@ describe("issue form parsing", () => {
     )
   })
 
+  it("rejects exponent priority notation", () => {
+    const formData = new FormData()
+    formData.set("project", "radial")
+    formData.set("title", "Create board")
+    formData.set("state", "Todo")
+    formData.set("priority", "1e3")
+    expect(() => parseIssueForm(formData)).toThrow(
+      "Priority must be an integer."
+    )
+  })
+
+  it("rejects invalid issue URLs", () => {
+    const formData = new FormData()
+    formData.set("project", "radial")
+    formData.set("title", "Create board")
+    formData.set("state", "Todo")
+    formData.set("url", "not-a-url")
+    expect(() => parseIssueForm(formData)).toThrow("URL must be a valid URL.")
+  })
+
+  it("omits empty optional fields and includes empty priority as null", () => {
+    const formData = new FormData()
+    formData.set("project", "radial")
+    formData.set("title", "Create board")
+    formData.set("state", "Todo")
+    formData.set("priority", "")
+    formData.set("description", " ")
+    formData.set("labels", " , ")
+    formData.set("blocked_by", " , ")
+    formData.set("assignee", " ")
+    formData.set("branch_name", " ")
+    formData.set("url", " ")
+
+    expect(parseIssueForm(formData)).toEqual({
+      project: "radial",
+      title: "Create board",
+      state: "Todo",
+      priority: null,
+    })
+  })
+
   it("parses comment, link, and relation forms", () => {
     const comment = new FormData()
     comment.set("body", "Ready for review")
@@ -82,6 +123,22 @@ describe("issue form parsing", () => {
     relation.set("target_issue_id", "issue-2")
     expect(() => parseRelationForm(relation)).toThrow(
       "Relation type must be related or blocked_by."
+    )
+  })
+
+  it("rejects missing comment body", () => {
+    expect(() => parseCommentBody(new FormData())).toThrow("Body is required.")
+  })
+
+  it("rejects missing link URL", () => {
+    expect(() => parseLinkForm(new FormData())).toThrow("URL is required.")
+  })
+
+  it("rejects missing relation target issue ID", () => {
+    const relation = new FormData()
+    relation.set("relation_type", "related")
+    expect(() => parseRelationForm(relation)).toThrow(
+      "Target issue is required."
     )
   })
 })
