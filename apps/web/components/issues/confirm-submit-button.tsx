@@ -16,6 +16,7 @@ export function ConfirmSubmitButton({
   return (
     <Button
       formAction={formAction}
+      type="submit"
       variant="destructive"
       onClick={(event) => {
         if (!window.confirm(message)) {
