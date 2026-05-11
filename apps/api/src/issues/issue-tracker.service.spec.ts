@@ -1,7 +1,8 @@
 import { HttpException } from "@nestjs/common"
 import { InMemoryIssueRepository } from "./in-memory-issue.repository"
 import { IssueTrackerService } from "./issue-tracker.service"
-import { TrackerErrorBody } from "./issue.types"
+import { IssueRecord, TrackerErrorBody } from "./issue.types"
+import { IssueRepository } from "./issue.repository"
 
 describe("IssueTrackerService", () => {
   let service: IssueTrackerService
@@ -393,6 +394,98 @@ describe("IssueTrackerService", () => {
       "tracker_not_found"
     )
   })
+
+  it("returns not found when repository writes lose the checked issue", async () => {
+    const repository = repositoryWithWriteMisses()
+    service = new IssueTrackerService(repository)
+
+    await expectTrackerError(
+      () =>
+        service.updateIssue("issue-1", {
+          state_name: "Done",
+        }),
+      "tracker_not_found"
+    )
+    await expectTrackerError(
+      () =>
+        service.createComment("issue-1", {
+          body: "Note",
+        }),
+      "tracker_not_found"
+    )
+    await expectTrackerError(
+      () =>
+        service.attachLink("issue-1", {
+          url: "https://example.com",
+        }),
+      "tracker_not_found"
+    )
+    await expectTrackerError(
+      () =>
+        service.createRelation("issue-1", {
+          relation_type: "related",
+          target_issue_id: "issue-2",
+        }),
+      "tracker_not_found"
+    )
+  })
+
+  it("keeps unresolved internal blocker references visible", async () => {
+    const repository = repositoryWithIssue(
+      issueRecord({
+        blocked_by_ids: ["missing-blocker"],
+      })
+    )
+    service = new IssueTrackerService(repository)
+
+    expect(
+      (await service.lookupIssues({ ids: ["issue-1"] }))[0]?.blocked_by
+    ).toEqual([
+      {
+        id: "missing-blocker",
+        identifier: "missing-blocker",
+        state: null,
+      },
+    ])
+  })
+
+  it("rejects malformed list and blocker entries", async () => {
+    await expectTrackerError(
+      () =>
+        service.searchIssues({
+          project: "radial",
+          active_states: "Todo",
+        }),
+      "tracker_unknown_payload"
+    )
+    await expectTrackerError(
+      () =>
+        service.createIssue({
+          project: "radial",
+          title: "Bad labels",
+          labels: "backend",
+        }),
+      "tracker_unknown_payload"
+    )
+    await expectTrackerError(
+      () =>
+        service.createIssue({
+          project: "radial",
+          title: "Bad blocker",
+          blocked_by: [1],
+        }),
+      "tracker_unknown_payload"
+    )
+    await expectTrackerError(
+      () =>
+        service.createIssue({
+          project: "radial",
+          title: "Bad blocker object",
+          blocked_by: [{}],
+        }),
+      "tracker_unknown_payload"
+    )
+  })
 })
 
 async function expectTrackerError(
@@ -418,4 +511,76 @@ function restoreEnv(key: string, value: string | undefined): void {
   }
 
   process.env[key] = value
+}
+
+function repositoryWithWriteMisses(): IssueRepository {
+  const source = issueRecord()
+  const target = issueRecord({
+    id: "issue-2",
+    identifier: "RADIAL-2",
+  })
+
+  return {
+    searchIssues: jest.fn().mockResolvedValue([]),
+    findIssuesByIds: jest.fn().mockResolvedValue([]),
+    findIssueById: jest.fn((issueId: string) =>
+      Promise.resolve(
+        [source, target].find((issue) => issue.id === issueId) ?? null
+      )
+    ),
+    issueExists: jest.fn().mockResolvedValue(false),
+    createIssue: jest.fn((issue) => Promise.resolve(issueRecord(issue))),
+    updateIssueState: jest.fn().mockResolvedValue(null),
+    createComment: jest.fn().mockResolvedValue(null),
+    updateComment: jest.fn().mockResolvedValue(null),
+    deactivateComment: jest.fn().mockResolvedValue(null),
+    attachLink: jest.fn().mockResolvedValue(null),
+    createRelation: jest.fn().mockResolvedValue(null),
+  }
+}
+
+function repositoryWithIssue(issue: IssueRecord): IssueRepository {
+  return {
+    searchIssues: jest.fn().mockResolvedValue([issue]),
+    findIssuesByIds: jest.fn((ids: string[]) =>
+      Promise.resolve(ids.includes(issue.id) ? [issue] : [])
+    ),
+    findIssueById: jest.fn((issueId: string) =>
+      Promise.resolve(issueId === issue.id ? issue : null)
+    ),
+    issueExists: jest.fn((issueId: string) =>
+      Promise.resolve(issueId === issue.id)
+    ),
+    createIssue: jest.fn((created) => Promise.resolve(issueRecord(created))),
+    updateIssueState: jest.fn().mockResolvedValue(issue),
+    createComment: jest.fn().mockResolvedValue(null),
+    updateComment: jest.fn().mockResolvedValue(null),
+    deactivateComment: jest.fn().mockResolvedValue(null),
+    attachLink: jest.fn().mockResolvedValue(null),
+    createRelation: jest.fn().mockResolvedValue(null),
+  }
+}
+
+function issueRecord(overrides: Partial<IssueRecord> = {}): IssueRecord {
+  return {
+    id: "issue-1",
+    identifier: "RADIAL-1",
+    project: "radial",
+    title: "Implement API",
+    description: null,
+    priority: null,
+    state: "Todo",
+    branch_name: null,
+    url: null,
+    labels: [],
+    blocked_by_ids: [],
+    external_blockers: [],
+    assignee: null,
+    created_at: "2026-05-12T00:00:00.000Z",
+    updated_at: "2026-05-12T00:00:00.000Z",
+    comments: [],
+    links: [],
+    relations: [],
+    ...overrides,
+  }
 }
