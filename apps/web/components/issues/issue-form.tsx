@@ -1,6 +1,7 @@
 import Link from "next/link"
 
 import { createIssueAction } from "@/app/issues/actions"
+import { boardHref } from "@/lib/issues/navigation"
 import { WORKFLOW_STATES } from "@/lib/tracker/constants"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { cn } from "@workspace/ui/lib/utils"
@@ -160,7 +161,10 @@ export function IssueForm({ defaultProject = "" }: IssueFormProps) {
       </section>
 
       <div className="flex flex-wrap justify-end gap-2">
-        <Link className={cn(buttonVariants({ variant: "outline" }))} href="/">
+        <Link
+          className={cn(buttonVariants({ variant: "outline" }))}
+          href={boardHref(defaultProject)}
+        >
           Cancel
         </Link>
         <Button type="submit">Create issue</Button>

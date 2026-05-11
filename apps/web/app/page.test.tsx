@@ -15,13 +15,21 @@ vi.mock("@/components/issues/board-toolbar", () => ({
   ),
 }))
 
-vi.mock("@/components/issues/issue-kanban-board", () => ({
-  IssueKanbanBoard: ({ issues }: { issues: NormalizedIssue[] }) => (
-    <div data-testid="board">
-      {issues.map((issue) => issue.identifier).join(",")}
-    </div>
-  ),
-}))
+vi.mock("@/components/issues/issue-kanban-board", async () => {
+  const React = await vi.importActual<typeof import("react")>("react")
+
+  return {
+    IssueKanbanBoard: ({ issues }: { issues: NormalizedIssue[] }) => {
+      const [mountedIssues] = React.useState(issues)
+
+      return (
+        <div data-testid="board">
+          {mountedIssues.map((issue) => issue.identifier).join(",")}
+        </div>
+      )
+    },
+  }
+})
 
 vi.mock("@/lib/tracker/client", () => ({
   searchIssues: searchIssuesMock,
@@ -101,5 +109,27 @@ describe("Page", () => {
       screen.getByText("tracker_request_failed: Tracker unavailable."),
     ).toBeInTheDocument()
     expect(screen.getByTestId("board")).toHaveTextContent("")
+  })
+
+  it("remounts the board when the active scope changes", async () => {
+    searchIssuesMock
+      .mockResolvedValueOnce([issues[0]])
+      .mockResolvedValueOnce([issues[1]])
+
+    const { rerender } = render(
+      await Page({
+        searchParams: Promise.resolve({ project: "radial", q: "auth" }),
+      }),
+    )
+    expect(screen.getByTestId("board")).toHaveTextContent("RAD-1")
+
+    rerender(
+      await Page({
+        searchParams: Promise.resolve({ project: "other", q: "billing" }),
+      }),
+    )
+
+    expect(screen.getByTestId("board")).toHaveTextContent("RAD-2")
+    expect(screen.getByTestId("board")).not.toHaveTextContent("RAD-1")
   })
 })

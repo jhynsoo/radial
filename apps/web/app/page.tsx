@@ -33,6 +33,20 @@ function loadErrorMessage(error: unknown): string {
   return "Failed to load issues."
 }
 
+function boardKey(
+  project: string,
+  query: string,
+  issues: NormalizedIssue[],
+): string {
+  return [
+    project,
+    query,
+    ...issues.map(
+      (issue) => `${issue.id}:${issue.state}:${issue.updated_at ?? ""}`,
+    ),
+  ].join("\u001f")
+}
+
 export default async function Page({ searchParams }: PageProps) {
   const params = await searchParams
   const project = firstSearchParam(params?.project)
@@ -60,7 +74,10 @@ export default async function Page({ searchParams }: PageProps) {
         </div>
       ) : null}
       {project ? (
-        <IssueKanbanBoard issues={issues} />
+        <IssueKanbanBoard
+          issues={issues}
+          key={boardKey(project, query, issues)}
+        />
       ) : (
         <div className="px-4 py-10 text-sm text-muted-foreground">
           Enter a project slug to load the issue board.

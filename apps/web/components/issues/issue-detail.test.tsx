@@ -51,6 +51,8 @@ describe("IssueDetailView", () => {
   it("does not render unsafe source or issue links as anchors", () => {
     render(<IssueDetailView issue={issue} />)
 
+    expect(screen.getByRole("link", { name: "Back to board" }))
+      .toHaveAttribute("href", "/?project=radial")
     expect(screen.queryByRole("link", { name: "Source issue" }))
       .not.toBeInTheDocument()
     expect(screen.getByText("Source: data:text/plain,issue")).toBeInTheDocument()

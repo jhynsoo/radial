@@ -8,6 +8,7 @@ import {
   StateChangeForm,
 } from "@/components/issues/issue-mutation-forms"
 import { safeExternalHref } from "@/lib/issues/links"
+import { boardHref } from "@/lib/issues/navigation"
 import type { IssueDetail } from "@/lib/tracker/types"
 import { buttonVariants } from "@workspace/ui/components/button"
 import { cn } from "@workspace/ui/lib/utils"
@@ -84,7 +85,7 @@ export function IssueDetailView({ issue }: { issue: IssueDetail }) {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Link
             className={cn(buttonVariants({ variant: "outline" }), "h-7")}
-            href="/"
+            href={boardHref(issue.project)}
           >
             Back to board
           </Link>

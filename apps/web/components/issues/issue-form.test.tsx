@@ -35,7 +35,7 @@ describe("IssueForm", () => {
     )
     expect(screen.getByRole("link", { name: "Cancel" })).toHaveAttribute(
       "href",
-      "/"
+      "/?project=radial"
     )
   })
 })
