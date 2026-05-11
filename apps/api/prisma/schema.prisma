@@ -1,0 +1,112 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model ProjectCounter {
+  key        String   @id
+  nextNumber Int      @default(1) @map("next_number")
+  updatedAt  DateTime @map("updated_at")
+
+  @@map("project_counters")
+}
+
+model Issue {
+  id               String                 @id
+  identifier       String
+  project          String                 @map("project_slug")
+  title            String
+  description      String?
+  priority         Int?
+  state            String
+  branchName       String?                @map("branch_name")
+  url              String?
+  assignee         String?
+  createdAt        DateTime               @map("created_at")
+  updatedAt        DateTime               @map("updated_at")
+  labels           IssueLabel[]
+  blockers         IssueBlocker[]         @relation("BlockedIssue")
+  blockingIssues   IssueBlocker[]         @relation("BlockingIssue")
+  externalBlockers IssueExternalBlocker[]
+  comments         IssueComment[]
+  links            IssueLink[]
+  relations        IssueRelation[]        @relation("SourceIssueRelations")
+  targetedBy       IssueRelation[]        @relation("TargetIssueRelations")
+
+  @@unique([project, identifier])
+  @@index([project, state])
+  @@map("issues")
+}
+
+model IssueLabel {
+  issueId String @map("issue_id")
+  label   String
+  issue   Issue  @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+  @@id([issueId, label])
+  @@map("issue_labels")
+}
+
+model IssueBlocker {
+  issueId        String @map("issue_id")
+  blockerIssueId String @map("blocker_issue_id")
+  issue          Issue  @relation("BlockedIssue", fields: [issueId], references: [id], onDelete: Cascade)
+  blocker        Issue  @relation("BlockingIssue", fields: [blockerIssueId], references: [id], onDelete: Cascade)
+
+  @@id([issueId, blockerIssueId])
+  @@map("issue_blockers")
+}
+
+model IssueExternalBlocker {
+  id         String  @id
+  issueId    String  @map("issue_id")
+  blockerId  String  @map("blocker_id")
+  identifier String
+  state      String?
+  issue      Issue   @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+  @@map("issue_external_blockers")
+}
+
+model IssueComment {
+  id        String   @id
+  issueId   String   @map("issue_id")
+  body      String
+  resolved  Boolean  @default(false)
+  createdAt DateTime @map("created_at")
+  updatedAt DateTime @map("updated_at")
+  issue     Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+  @@index([issueId, resolved])
+  @@map("issue_comments")
+}
+
+model IssueLink {
+  id        String   @id
+  issueId   String   @map("issue_id")
+  url       String
+  title     String?
+  type      String?
+  createdAt DateTime @map("created_at")
+  issue     Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+  @@index([issueId])
+  @@map("issue_links")
+}
+
+model IssueRelation {
+  id            String   @id
+  sourceIssueId String   @map("source_issue_id")
+  relationType  String   @map("relation_type")
+  targetIssueId String   @map("target_issue_id")
+  createdAt     DateTime @map("created_at")
+  sourceIssue   Issue    @relation("SourceIssueRelations", fields: [sourceIssueId], references: [id], onDelete: Cascade)
+  targetIssue   Issue    @relation("TargetIssueRelations", fields: [targetIssueId], references: [id], onDelete: Cascade)
+
+  @@index([sourceIssueId])
+  @@index([targetIssueId])
+  @@map("issue_relations")
+}
