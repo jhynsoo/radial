@@ -64,6 +64,18 @@ async function readError(response: Response): Promise<TrackerClientError> {
   )
 }
 
+async function readJson<T>(response: Response): Promise<T> {
+  try {
+    return (await response.json()) as T
+  } catch {
+    throw new TrackerClientError(
+      "tracker_decode_error",
+      `Tracker returned invalid JSON for HTTP ${response.status}.`,
+      response.status,
+    )
+  }
+}
+
 async function requestTracker<T>(
   path: string,
   init: RequestInit = {},
@@ -89,7 +101,7 @@ async function requestTracker<T>(
     throw await readError(response)
   }
 
-  return (await response.json()) as T
+  return readJson<T>(response)
 }
 
 export async function searchIssues(
@@ -108,6 +120,7 @@ export async function searchIssues(
 export async function getIssue(issueId: string): Promise<IssueDetail> {
   const response = await requestTracker<{ issue: IssueDetail }>(
     `/issues/${encodeURIComponent(issueId)}`,
+    { method: "GET" },
   )
   return response.issue
 }
@@ -148,6 +161,18 @@ export async function createComment(
   return response.comment
 }
 
+export async function listComments(
+  issueId: string,
+  includeResolved = false,
+): Promise<IssueComment[]> {
+  const suffix = includeResolved ? "?include_resolved=true" : ""
+  const response = await requestTracker<{ comments: IssueComment[] }>(
+    `/issues/${encodeURIComponent(issueId)}/comments${suffix}`,
+    { method: "GET" },
+  )
+  return response.comments
+}
+
 export async function updateComment(
   commentId: string,
   body: string,
@@ -170,6 +195,14 @@ export async function deactivateComment(
     { method: "DELETE" },
   )
   return response.comment
+}
+
+export async function listLinks(issueId: string): Promise<IssueLink[]> {
+  const response = await requestTracker<{ links: IssueLink[] }>(
+    `/issues/${encodeURIComponent(issueId)}/links`,
+    { method: "GET" },
+  )
+  return response.links
 }
 
 export async function attachLink(
@@ -201,6 +234,8 @@ export async function createRelation(
 }
 
 export async function getCurrentUser(): Promise<CurrentUser> {
-  const response = await requestTracker<{ user: CurrentUser }>("/users/me")
+  const response = await requestTracker<{ user: CurrentUser }>("/users/me", {
+    method: "GET",
+  })
   return response.user
 }
