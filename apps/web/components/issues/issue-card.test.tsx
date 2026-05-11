@@ -26,4 +26,26 @@ describe("IssueCard", () => {
     expect(screen.getByText("Build Kanban board")).toBeInTheDocument()
     expect(screen.getByText("1 blocker")).toBeInTheDocument()
   })
+
+  it("renders a normal issue link without a drag handle when disabled", () => {
+    render(<IssueCard issue={issue} draggable={false} />)
+
+    expect(
+      screen.getByRole("link", { name: /Build Kanban board/ })
+    ).toHaveAttribute("href", "/issues/issue-1")
+    expect(
+      screen.queryByRole("button", { name: "Drag issue RAD-1" })
+    ).not.toBeInTheDocument()
+  })
+
+  it("renders a separate drag handle when draggable", () => {
+    render(<IssueCard issue={issue} />)
+
+    expect(
+      screen.getByRole("button", { name: "Drag issue RAD-1" })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("link", { name: /Build Kanban board/ })
+    ).toHaveAttribute("href", "/issues/issue-1")
+  })
 })

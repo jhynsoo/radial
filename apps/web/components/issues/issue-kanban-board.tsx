@@ -27,10 +27,6 @@ function IssueKanbanBoard({ issues }: IssueKanbanBoardProps) {
   const [error, setError] = React.useState<string | null>(null)
   const [, startTransition] = React.useTransition()
 
-  React.useEffect(() => {
-    setLocalIssues(issues)
-  }, [issues])
-
   const groupedIssues = React.useMemo(
     () => groupIssuesByState(localIssues),
     [localIssues]
@@ -49,16 +45,23 @@ function IssueKanbanBoard({ issues }: IssueKanbanBoardProps) {
       return
     }
 
-    const previousIssues = localIssues
-    const nextIssues = moveIssueState(localIssues, issueId, overId)
+    const previousIssueState = issue.state
+    const nextState = overId
+    const nextIssues = moveIssueState(localIssues, issueId, nextState)
     setError(null)
     setLocalIssues(nextIssues)
 
     startTransition(async () => {
       try {
-        await updateIssueStateAction(issueId, overId)
+        await updateIssueStateAction(issueId, nextState)
       } catch {
-        setLocalIssues(previousIssues)
+        setLocalIssues((currentIssues) =>
+          currentIssues.map((currentIssue) =>
+            currentIssue.id === issueId && currentIssue.state === nextState
+              ? { ...currentIssue, state: previousIssueState }
+              : currentIssue
+          )
+        )
         setError("Issue state update failed. The board was restored.")
       }
     })
