@@ -3,6 +3,8 @@ import { INestApplication } from "@nestjs/common"
 import request from "supertest"
 import { App } from "supertest/types"
 import { AppModule } from "./../src/app.module"
+import { InMemoryIssueRepository } from "../src/issues/in-memory-issue.repository"
+import { ISSUE_REPOSITORY } from "../src/issues/issue.repository"
 import { IssueDetail } from "../src/issues/issue.types"
 
 interface IssueResponse {
@@ -19,7 +21,10 @@ describe("AppController (e2e)", () => {
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile()
+    })
+      .overrideProvider(ISSUE_REPOSITORY)
+      .useValue(new InMemoryIssueRepository())
+      .compile()
 
     app = moduleFixture.createNestApplication()
     app.setGlobalPrefix("api")

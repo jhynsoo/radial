@@ -20,48 +20,48 @@ export class IssueTrackerController {
 
   @Post("issues/search")
   @HttpCode(200)
-  searchIssues(@Body() body: unknown) {
+  async searchIssues(@Body() body: unknown) {
     return {
-      issues: this.issueTracker.searchIssues(body),
+      issues: await this.issueTracker.searchIssues(body),
     }
   }
 
   @Post("issues/lookup")
   @HttpCode(200)
-  lookupIssues(@Body() body: unknown) {
+  async lookupIssues(@Body() body: unknown) {
     return {
-      issues: this.issueTracker.lookupIssues(body),
+      issues: await this.issueTracker.lookupIssues(body),
     }
   }
 
   @Post("issues")
-  createIssue(@Body() body: unknown) {
+  async createIssue(@Body() body: unknown) {
     return {
-      issue: this.issueTracker.createIssue(body),
+      issue: await this.issueTracker.createIssue(body),
     }
   }
 
   @Get("issues/:issueId")
-  getIssue(@Param("issueId") issueId: string) {
+  async getIssue(@Param("issueId") issueId: string) {
     return {
-      issue: this.issueTracker.getIssue(issueId),
+      issue: await this.issueTracker.getIssue(issueId),
     }
   }
 
   @Patch("issues/:issueId")
-  updateIssue(@Param("issueId") issueId: string, @Body() body: unknown) {
+  async updateIssue(@Param("issueId") issueId: string, @Body() body: unknown) {
     return {
-      issue: this.issueTracker.updateIssue(issueId, body),
+      issue: await this.issueTracker.updateIssue(issueId, body),
     }
   }
 
   @Get("issues/:issueId/comments")
-  listComments(
+  async listComments(
     @Param("issueId") issueId: string,
     @Query("include_resolved") includeResolved?: string
   ) {
     return {
-      comments: this.issueTracker.listComments(
+      comments: await this.issueTracker.listComments(
         issueId,
         includeResolved === "true"
       ),
@@ -69,44 +69,53 @@ export class IssueTrackerController {
   }
 
   @Post("issues/:issueId/comments")
-  createComment(@Param("issueId") issueId: string, @Body() body: unknown) {
+  async createComment(
+    @Param("issueId") issueId: string,
+    @Body() body: unknown
+  ) {
     return {
-      comment: this.issueTracker.createComment(issueId, body),
+      comment: await this.issueTracker.createComment(issueId, body),
     }
   }
 
   @Patch("comments/:commentId")
-  updateComment(@Param("commentId") commentId: string, @Body() body: unknown) {
+  async updateComment(
+    @Param("commentId") commentId: string,
+    @Body() body: unknown
+  ) {
     return {
-      comment: this.issueTracker.updateComment(commentId, body),
+      comment: await this.issueTracker.updateComment(commentId, body),
     }
   }
 
   @Delete("comments/:commentId")
-  deactivateComment(@Param("commentId") commentId: string) {
+  async deactivateComment(@Param("commentId") commentId: string) {
     return {
-      comment: this.issueTracker.deactivateComment(commentId),
+      comment: await this.issueTracker.deactivateComment(commentId),
     }
   }
 
   @Get("issues/:issueId/links")
-  listLinks(@Param("issueId") issueId: string) {
+  async listLinks(@Param("issueId") issueId: string) {
     return {
-      links: this.issueTracker.listLinks(issueId),
+      links: await this.issueTracker.listLinks(issueId),
     }
   }
 
   @Post("issues/:issueId/links")
-  attachLink(@Param("issueId") issueId: string, @Body() body: unknown) {
+  async attachLink(@Param("issueId") issueId: string, @Body() body: unknown) {
     return {
-      link: this.issueTracker.attachLink(issueId, body),
+      link: await this.issueTracker.attachLink(issueId, body),
     }
   }
 
   @Post("issues/:issueId/relations")
-  createRelation(@Param("issueId") issueId: string, @Body() body: unknown) {
+  async createRelation(
+    @Param("issueId") issueId: string,
+    @Body() body: unknown
+  ) {
     return {
-      relation: this.issueTracker.createRelation(issueId, body),
+      relation: await this.issueTracker.createRelation(issueId, body),
     }
   }
 

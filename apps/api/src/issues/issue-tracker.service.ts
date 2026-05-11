@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common"
+import { Inject, Injectable } from "@nestjs/common"
 import { randomUUID } from "crypto"
 import {
   IssueBlocker,
@@ -10,6 +10,8 @@ import {
   NormalizedIssue,
   RelationType,
 } from "./issue.types"
+import { ISSUE_REPOSITORY } from "./issue.repository"
+import type { IssueRepository, NewIssueRecord } from "./issue.repository"
 import { badRequest, notFound } from "./tracker-errors"
 
 const DEFAULT_STATES = [
@@ -40,27 +42,23 @@ function stateKey(state: string): string {
   return state.trim().toLowerCase()
 }
 
-function sameState(left: string, right: string): boolean {
-  return stateKey(left) === stateKey(right)
-}
-
 function nowIso(): string {
   return new Date().toISOString()
 }
 
 @Injectable()
 export class IssueTrackerService {
-  private readonly issues = new Map<string, IssueRecord>()
-  private readonly issueCounters = new Map<string, number>()
   private readonly statesByKey = new Map<string, string>()
 
-  constructor() {
+  constructor(
+    @Inject(ISSUE_REPOSITORY) private readonly issueRepository: IssueRepository
+  ) {
     for (const state of DEFAULT_STATES) {
       this.registerState(state)
     }
   }
 
-  searchIssues(payload: unknown): NormalizedIssue[] {
+  async searchIssues(payload: unknown): Promise<NormalizedIssue[]> {
     const body = asRecord(payload)
     const project = this.readRequiredString(
       body.project,
@@ -83,17 +81,16 @@ export class IssueTrackerService {
     }
 
     const assignee = this.resolveAssigneeFilter(body.assignee)
+    const issues = await this.issueRepository.searchIssues({
+      project,
+      states: requestedStates,
+      assignee,
+    })
 
-    return [...this.issues.values()]
-      .filter((issue) => issue.project === project)
-      .filter((issue) =>
-        requestedStates.some((state) => sameState(issue.state, state))
-      )
-      .filter((issue) => assignee === null || issue.assignee === assignee)
-      .map((issue) => this.toNormalizedIssue(issue))
+    return Promise.all(issues.map((issue) => this.toNormalizedIssue(issue)))
   }
 
-  lookupIssues(payload: unknown): NormalizedIssue[] {
+  async lookupIssues(payload: unknown): Promise<NormalizedIssue[]> {
     const body = asRecord(payload)
     const ids = this.readOptionalStringList(body.ids)
 
@@ -105,17 +102,16 @@ export class IssueTrackerService {
       return []
     }
 
-    return ids
-      .map((id) => this.issues.get(id))
-      .filter((issue): issue is IssueRecord => issue !== undefined)
-      .map((issue) => this.toNormalizedIssue(issue))
+    const issues = await this.issueRepository.findIssuesByIds(ids)
+
+    return Promise.all(issues.map((issue) => this.toNormalizedIssue(issue)))
   }
 
-  getIssue(issueId: string): IssueDetail {
-    return this.toIssueDetail(this.requireIssue(issueId))
+  async getIssue(issueId: string): Promise<IssueDetail> {
+    return this.toIssueDetail(await this.requireIssue(issueId))
   }
 
-  createIssue(payload: unknown): IssueDetail {
+  async createIssue(payload: unknown): Promise<IssueDetail> {
     const body = asRecord(payload)
     const project = this.readRequiredString(
       body.project,
@@ -134,10 +130,8 @@ export class IssueTrackerService {
     )
     const createdAt = nowIso()
     const id = `issue-${randomUUID()}`
-    const identifier = this.nextIdentifier(project)
-    const issue: IssueRecord = {
+    const issue: NewIssueRecord = {
       id,
-      identifier,
       project,
       title,
       description: this.readOptionalString(body.description),
@@ -153,22 +147,17 @@ export class IssueTrackerService {
       assignee: this.resolveAssignee(body.assignee),
       created_at: createdAt,
       updated_at: createdAt,
-      comments: [],
-      links: [],
-      relations: [],
     }
 
-    const blockers = this.readBlockers(body.blocked_by)
+    const blockers = await this.readBlockers(body.blocked_by)
     issue.blocked_by_ids = blockers.blockedByIds
     issue.external_blockers = blockers.externalBlockers
 
-    this.issues.set(issue.id, issue)
-
-    return this.toIssueDetail(issue)
+    return this.toIssueDetail(await this.issueRepository.createIssue(issue))
   }
 
-  updateIssue(issueId: string, payload: unknown): IssueDetail {
-    const issue = this.requireIssue(issueId)
+  async updateIssue(issueId: string, payload: unknown): Promise<IssueDetail> {
+    await this.requireIssue(issueId)
     const body = asRecord(payload)
     const state =
       this.readOptionalString(body.state_name) ??
@@ -181,14 +170,24 @@ export class IssueTrackerService {
       )
     }
 
-    issue.state = this.resolveExistingState(state)
-    issue.updated_at = nowIso()
+    const updated = await this.issueRepository.updateIssueState(
+      issueId,
+      this.resolveExistingState(state),
+      nowIso()
+    )
 
-    return this.toIssueDetail(issue)
+    if (!updated) {
+      notFound("tracker_not_found", `Issue '${issueId}' was not found.`)
+    }
+
+    return this.toIssueDetail(updated)
   }
 
-  listComments(issueId: string, includeResolved: boolean): IssueComment[] {
-    const issue = this.requireIssue(issueId)
+  async listComments(
+    issueId: string,
+    includeResolved: boolean
+  ): Promise<IssueComment[]> {
+    const issue = await this.requireIssue(issueId)
 
     if (includeResolved) {
       return issue.comments
@@ -197,8 +196,11 @@ export class IssueTrackerService {
     return issue.comments.filter((comment) => !comment.resolved)
   }
 
-  createComment(issueId: string, payload: unknown): IssueComment {
-    const issue = this.requireIssue(issueId)
+  async createComment(
+    issueId: string,
+    payload: unknown
+  ): Promise<IssueComment> {
+    const issue = await this.requireIssue(issueId)
     const body = asRecord(payload)
     const bodyText = this.readRequiredString(
       body.body,
@@ -215,41 +217,67 @@ export class IssueTrackerService {
       updated_at: createdAt,
     }
 
-    issue.comments.push(comment)
-    issue.updated_at = createdAt
+    const created = await this.issueRepository.createComment(
+      issue.id,
+      comment,
+      createdAt
+    )
 
-    return comment
+    if (!created) {
+      notFound("tracker_not_found", `Issue '${issueId}' was not found.`)
+    }
+
+    return created
   }
 
-  updateComment(commentId: string, payload: unknown): IssueComment {
-    const { issue, comment } = this.requireComment(commentId)
+  async updateComment(
+    commentId: string,
+    payload: unknown
+  ): Promise<IssueComment> {
     const body = asRecord(payload)
-    comment.body = this.readRequiredString(
+    const bodyText = this.readRequiredString(
       body.body,
       "body",
       "tracker_comment_update_failed"
     )
-    comment.updated_at = nowIso()
-    issue.updated_at = comment.updated_at
+    const updated = await this.issueRepository.updateComment(
+      commentId,
+      bodyText,
+      nowIso()
+    )
 
-    return comment
+    if (!updated) {
+      notFound(
+        "tracker_comment_not_found",
+        `Comment '${commentId}' was not found.`
+      )
+    }
+
+    return updated
   }
 
-  deactivateComment(commentId: string): IssueComment {
-    const { issue, comment } = this.requireComment(commentId)
-    comment.resolved = true
-    comment.updated_at = nowIso()
-    issue.updated_at = comment.updated_at
+  async deactivateComment(commentId: string): Promise<IssueComment> {
+    const updated = await this.issueRepository.deactivateComment(
+      commentId,
+      nowIso()
+    )
 
-    return comment
+    if (!updated) {
+      notFound(
+        "tracker_comment_not_found",
+        `Comment '${commentId}' was not found.`
+      )
+    }
+
+    return updated
   }
 
-  listLinks(issueId: string): IssueLink[] {
-    return this.requireIssue(issueId).links
+  async listLinks(issueId: string): Promise<IssueLink[]> {
+    return (await this.requireIssue(issueId)).links
   }
 
-  attachLink(issueId: string, payload: unknown): IssueLink {
-    const issue = this.requireIssue(issueId)
+  async attachLink(issueId: string, payload: unknown): Promise<IssueLink> {
+    const issue = await this.requireIssue(issueId)
     const body = asRecord(payload)
     const url = this.readRequiredString(
       body.url,
@@ -270,14 +298,24 @@ export class IssueTrackerService {
       created_at: createdAt,
     }
 
-    issue.links.push(link)
-    issue.updated_at = createdAt
+    const attached = await this.issueRepository.attachLink(
+      issue.id,
+      link,
+      createdAt
+    )
 
-    return link
+    if (!attached) {
+      notFound("tracker_not_found", `Issue '${issueId}' was not found.`)
+    }
+
+    return attached
   }
 
-  createRelation(issueId: string, payload: unknown): IssueRelation {
-    const source = this.requireIssue(issueId)
+  async createRelation(
+    issueId: string,
+    payload: unknown
+  ): Promise<IssueRelation> {
+    const source = await this.requireIssue(issueId)
     const body = asRecord(payload)
     const relationType = this.readRelationType(body.relation_type)
     const targetIssueId = this.readRequiredString(
@@ -285,7 +323,7 @@ export class IssueTrackerService {
       "target_issue_id",
       "tracker_relation_create_failed"
     )
-    const target = this.requireIssue(targetIssueId)
+    const target = await this.requireIssue(targetIssueId)
     const createdAt = nowIso()
     const relation: IssueRelation = {
       id: `relation-${randomUUID()}`,
@@ -295,18 +333,16 @@ export class IssueTrackerService {
       created_at: createdAt,
     }
 
-    source.relations.push(relation)
+    const created = await this.issueRepository.createRelation(
+      relation,
+      createdAt
+    )
 
-    if (
-      relationType === "blocked_by" &&
-      !source.blocked_by_ids.includes(target.id)
-    ) {
-      source.blocked_by_ids.push(target.id)
+    if (!created) {
+      notFound("tracker_not_found", `Issue '${issueId}' was not found.`)
     }
 
-    source.updated_at = createdAt
-
-    return relation
+    return created
   }
 
   getCurrentUser() {
@@ -317,8 +353,8 @@ export class IssueTrackerService {
     }
   }
 
-  private requireIssue(issueId: string): IssueRecord {
-    const issue = this.issues.get(issueId)
+  private async requireIssue(issueId: string): Promise<IssueRecord> {
+    const issue = await this.issueRepository.findIssueById(issueId)
 
     if (!issue) {
       notFound("tracker_not_found", `Issue '${issueId}' was not found.`)
@@ -327,27 +363,9 @@ export class IssueTrackerService {
     return issue
   }
 
-  private requireComment(commentId: string): {
-    issue: IssueRecord
-    comment: IssueComment
-  } {
-    for (const issue of this.issues.values()) {
-      const comment = issue.comments.find((item) => item.id === commentId)
-
-      if (comment) {
-        return { issue, comment }
-      }
-    }
-
-    notFound(
-      "tracker_comment_not_found",
-      `Comment '${commentId}' was not found.`
-    )
-  }
-
-  private toIssueDetail(issue: IssueRecord): IssueDetail {
+  private async toIssueDetail(issue: IssueRecord): Promise<IssueDetail> {
     return {
-      ...this.toNormalizedIssue(issue),
+      ...(await this.toNormalizedIssue(issue)),
       project: issue.project,
       comments: issue.comments,
       links: issue.links,
@@ -355,7 +373,9 @@ export class IssueTrackerService {
     }
   }
 
-  private toNormalizedIssue(issue: IssueRecord): NormalizedIssue {
+  private async toNormalizedIssue(
+    issue: IssueRecord
+  ): Promise<NormalizedIssue> {
     return {
       id: issue.id,
       identifier: issue.identifier,
@@ -366,15 +386,21 @@ export class IssueTrackerService {
       branch_name: issue.branch_name,
       url: issue.url,
       labels: issue.labels,
-      blocked_by: this.resolveBlockers(issue),
+      blocked_by: await this.resolveBlockers(issue),
       created_at: issue.created_at,
       updated_at: issue.updated_at,
     }
   }
 
-  private resolveBlockers(issue: IssueRecord): IssueBlocker[] {
+  private async resolveBlockers(issue: IssueRecord): Promise<IssueBlocker[]> {
+    const blockers = await this.issueRepository.findIssuesByIds(
+      issue.blocked_by_ids
+    )
+    const blockersById = new Map(
+      blockers.map((blocker) => [blocker.id, blocker])
+    )
     const knownBlockers = issue.blocked_by_ids.map((blockerId) => {
-      const blocker = this.issues.get(blockerId)
+      const blocker = blockersById.get(blockerId)
 
       if (!blocker) {
         return {
@@ -394,10 +420,10 @@ export class IssueTrackerService {
     return [...knownBlockers, ...issue.external_blockers]
   }
 
-  private readBlockers(value: unknown): {
+  private async readBlockers(value: unknown): Promise<{
     blockedByIds: string[]
     externalBlockers: IssueBlocker[]
-  } {
+  }> {
     if (value === undefined || value === null) {
       return { blockedByIds: [], externalBlockers: [] }
     }
@@ -411,7 +437,7 @@ export class IssueTrackerService {
 
     for (const blocker of value) {
       if (typeof blocker === "string") {
-        if (this.issues.has(blocker)) {
+        if (await this.issueRepository.issueExists(blocker)) {
           blockedByIds.push(blocker)
         } else {
           externalBlockers.push({
@@ -435,7 +461,7 @@ export class IssueTrackerService {
           "tracker_unknown_payload"
         )
 
-        if (this.issues.has(id)) {
+        if (await this.issueRepository.issueExists(id)) {
           blockedByIds.push(id)
         } else {
           externalBlockers.push({
@@ -585,18 +611,6 @@ export class IssueTrackerService {
     }
 
     return existing
-  }
-
-  private nextIdentifier(project: string): string {
-    const prefix = project
-      .replace(/[^a-z0-9]+/gi, "-")
-      .replace(/^-|-$/g, "")
-      .toUpperCase()
-    const safePrefix = prefix.length > 0 ? prefix : "ISSUE"
-    const next = (this.issueCounters.get(safePrefix) ?? 0) + 1
-    this.issueCounters.set(safePrefix, next)
-
-    return `${safePrefix}-${next}`
   }
 
   private publicBaseUrl(): string {

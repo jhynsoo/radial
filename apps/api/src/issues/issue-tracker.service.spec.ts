@@ -1,4 +1,5 @@
 import { HttpException } from "@nestjs/common"
+import { InMemoryIssueRepository } from "./in-memory-issue.repository"
 import { IssueTrackerService } from "./issue-tracker.service"
 import { TrackerErrorBody } from "./issue.types"
 
@@ -16,7 +17,7 @@ describe("IssueTrackerService", () => {
     delete process.env.TRACKER_USER_NAME
     delete process.env.TRACKER_USER_EMAIL
 
-    service = new IssueTrackerService()
+    service = new IssueTrackerService(new InMemoryIssueRepository())
   })
 
   afterEach(() => {
@@ -25,8 +26,8 @@ describe("IssueTrackerService", () => {
     restoreEnv("TRACKER_USER_EMAIL", originalUserEmail)
   })
 
-  it("creates issues with normalized defaults and generated identifiers", () => {
-    const issue = service.createIssue({
+  it("creates issues with normalized defaults and generated identifiers", async () => {
+    const issue = await service.createIssue({
       project: " radial app ",
       title: " Implement API ",
       description: " Details ",
@@ -59,25 +60,29 @@ describe("IssueTrackerService", () => {
     expect(issue.updated_at).toBe(issue.created_at)
 
     expect(
-      service.createIssue({
-        project: "radial app",
-        title: "Second issue",
-      }).identifier
+      (
+        await service.createIssue({
+          project: "radial app",
+          title: "Second issue",
+        })
+      ).identifier
     ).toBe("RADIAL-APP-2")
     expect(
-      service.createIssue({
-        project: "@@@",
-        title: "Fallback prefix",
-      }).identifier
+      (
+        await service.createIssue({
+          project: "@@@",
+          title: "Fallback prefix",
+        })
+      ).identifier
     ).toBe("ISSUE-1")
   })
 
-  it("uses configured public URLs and current user profile values", () => {
+  it("uses configured public URLs and current user profile values", async () => {
     process.env.TRACKER_PUBLIC_URL = "https://tracker.example/api/v1/"
     process.env.TRACKER_USER_NAME = "Automation User"
     process.env.TRACKER_USER_EMAIL = "automation@example.com"
 
-    const issue = service.createIssue({
+    const issue = await service.createIssue({
       project: "radial",
       title: "Configured URL",
     })
@@ -90,19 +95,19 @@ describe("IssueTrackerService", () => {
     })
   })
 
-  it("searches by project, state, and assignee while lookup preserves requested order", () => {
-    const assigned = service.createIssue({
+  it("searches by project, state, and assignee while lookup preserves requested order", async () => {
+    const assigned = await service.createIssue({
       project: "radial",
       title: "Assigned work",
       state_name: "Todo",
       assignee: "me",
     })
-    const unassigned = service.createIssue({
+    const unassigned = await service.createIssue({
       project: "radial",
       title: "Unassigned work",
       state_name: "In Progress",
     })
-    service.createIssue({
+    await service.createIssue({
       project: "other",
       title: "Out of scope",
       state_name: "Todo",
@@ -110,45 +115,45 @@ describe("IssueTrackerService", () => {
     })
 
     expect(
-      service
-        .searchIssues({
+      (
+        await service.searchIssues({
           project: "radial",
           active_states: [" todo ", "IN PROGRESS"],
           assignee: "me",
         })
-        .map((issue) => issue.id)
+      ).map((issue) => issue.id)
     ).toEqual([assigned.id])
     expect(
-      service
-        .searchIssues({
+      (
+        await service.searchIssues({
           project: "radial",
           states: ["in progress"],
         })
-        .map((issue) => issue.id)
+      ).map((issue) => issue.id)
     ).toEqual([unassigned.id])
     expect(
-      service.searchIssues({
+      await service.searchIssues({
         project: "radial",
         states: [],
       })
     ).toEqual([])
     expect(
-      service
-        .lookupIssues({
+      (
+        await service.lookupIssues({
           ids: [unassigned.id, "missing", assigned.id],
         })
-        .map((issue) => issue.id)
+      ).map((issue) => issue.id)
     ).toEqual([unassigned.id, assigned.id])
-    expect(service.lookupIssues({ ids: [] })).toEqual([])
+    expect(await service.lookupIssues({ ids: [] })).toEqual([])
   })
 
-  it("resolves internal and external blockers with live internal state", () => {
-    const blocker = service.createIssue({
+  it("resolves internal and external blockers with live internal state", async () => {
+    const blocker = await service.createIssue({
       project: "radial",
       title: "Dependency",
       state_name: "Todo",
     })
-    const issue = service.createIssue({
+    const issue = await service.createIssue({
       project: "radial",
       title: "Blocked work",
       blocked_by: [
@@ -181,35 +186,37 @@ describe("IssueTrackerService", () => {
       },
     ])
 
-    service.updateIssue(blocker.id, {
+    await service.updateIssue(blocker.id, {
       state_name: "Done",
     })
 
-    expect(service.lookupIssues({ ids: [issue.id] })[0]?.blocked_by[0]).toEqual(
-      {
-        id: blocker.id,
-        identifier: blocker.identifier,
-        state: "Done",
-      }
-    )
+    expect(
+      (await service.lookupIssues({ ids: [issue.id] }))[0]?.blocked_by[0]
+    ).toEqual({
+      id: blocker.id,
+      identifier: blocker.identifier,
+      state: "Done",
+    })
   })
 
-  it("updates issues only to registered states", () => {
-    const issue = service.createIssue({
+  it("updates issues only to registered states", async () => {
+    const issue = await service.createIssue({
       project: "radial",
       title: "Review work",
     })
 
     expect(
-      service.updateIssue(issue.id, {
-        state_name: "human review",
-      }).state
+      (
+        await service.updateIssue(issue.id, {
+          state_name: "human review",
+        })
+      ).state
     ).toBe("Human Review")
-    expectTrackerError(
+    await expectTrackerError(
       () => service.updateIssue(issue.id, {}),
       "tracker_invalid_state_transition"
     )
-    expectTrackerError(
+    await expectTrackerError(
       () =>
         service.updateIssue(issue.id, {
           state_name: "Unknown",
@@ -218,12 +225,12 @@ describe("IssueTrackerService", () => {
     )
   })
 
-  it("creates, updates, resolves, and filters comments", () => {
-    const issue = service.createIssue({
+  it("creates, updates, resolves, and filters comments", async () => {
+    const issue = await service.createIssue({
       project: "radial",
       title: "Commented issue",
     })
-    const comment = service.createComment(issue.id, {
+    const comment = await service.createComment(issue.id, {
       body: " Initial note ",
     })
 
@@ -234,30 +241,30 @@ describe("IssueTrackerService", () => {
         resolved: false,
       })
     )
-    expect(service.listComments(issue.id, false)).toEqual([comment])
+    expect(await service.listComments(issue.id, false)).toEqual([comment])
 
-    const updated = service.updateComment(comment.id, {
+    const updated = await service.updateComment(comment.id, {
       body: " Updated note ",
     })
     expect(updated.body).toBe("Updated note")
 
-    const resolved = service.deactivateComment(comment.id)
+    const resolved = await service.deactivateComment(comment.id)
     expect(resolved.resolved).toBe(true)
-    expect(service.listComments(issue.id, false)).toEqual([])
-    expect(service.listComments(issue.id, true)).toEqual([resolved])
-    expectTrackerError(
+    expect(await service.listComments(issue.id, false)).toEqual([])
+    expect(await service.listComments(issue.id, true)).toEqual([resolved])
+    await expectTrackerError(
       () => service.updateComment("missing-comment", { body: "Nope" }),
       "tracker_comment_not_found"
     )
   })
 
-  it("attaches valid links and rejects invalid link payloads", () => {
-    const issue = service.createIssue({
+  it("attaches valid links and rejects invalid link payloads", async () => {
+    const issue = await service.createIssue({
       project: "radial",
       title: "Linked issue",
     })
 
-    const link = service.attachLink(issue.id, {
+    const link = await service.attachLink(issue.id, {
       url: "https://github.com/example/radial/pull/1",
       title_or_type: "pull_request",
       type: "pull_request",
@@ -271,55 +278,57 @@ describe("IssueTrackerService", () => {
         type: "pull_request",
       })
     )
-    expect(service.listLinks(issue.id)).toEqual([link])
-    expectTrackerError(
+    expect(await service.listLinks(issue.id)).toEqual([link])
+    await expectTrackerError(
       () =>
         service.attachLink(issue.id, {
           url: "not a url",
         }),
       "tracker_link_attach_failed"
     )
-    expectTrackerError(
+    await expectTrackerError(
       () => service.attachLink(issue.id, {}),
       "tracker_link_attach_failed"
     )
   })
 
-  it("creates relations and keeps blocked_by relations visible on issues", () => {
-    const source = service.createIssue({
+  it("creates relations and keeps blocked_by relations visible on issues", async () => {
+    const source = await service.createIssue({
       project: "radial",
       title: "Source",
     })
-    const target = service.createIssue({
+    const target = await service.createIssue({
       project: "radial",
       title: "Target",
       state_name: "Backlog",
     })
 
-    const related = service.createRelation(source.id, {
+    const related = await service.createRelation(source.id, {
       relation_type: "related",
       target_issue_id: target.id,
     })
-    const blockedBy = service.createRelation(source.id, {
+    const blockedBy = await service.createRelation(source.id, {
       relation_type: "blocked_by",
       target_issue_id: target.id,
     })
-    service.createRelation(source.id, {
+    await service.createRelation(source.id, {
       relation_type: "blocked_by",
       target_issue_id: target.id,
     })
 
     expect(related.relation_type).toBe("related")
     expect(blockedBy.relation_type).toBe("blocked_by")
-    expect(service.getIssue(source.id).relations).toHaveLength(3)
-    expect(service.lookupIssues({ ids: [source.id] })[0]?.blocked_by).toEqual([
+    expect((await service.getIssue(source.id)).relations).toHaveLength(3)
+    expect(
+      (await service.lookupIssues({ ids: [source.id] }))[0]?.blocked_by
+    ).toEqual([
       {
         id: target.id,
         identifier: target.identifier,
         state: "Backlog",
       },
     ])
-    expectTrackerError(
+    await expectTrackerError(
       () =>
         service.createRelation(source.id, {
           relation_type: "duplicates",
@@ -327,7 +336,7 @@ describe("IssueTrackerService", () => {
         }),
       "tracker_relation_create_failed"
     )
-    expectTrackerError(
+    await expectTrackerError(
       () =>
         service.createRelation(source.id, {
           relation_type: "related",
@@ -337,19 +346,19 @@ describe("IssueTrackerService", () => {
     )
   })
 
-  it("returns tracker error categories for invalid payloads", () => {
-    expectTrackerError(
+  it("returns tracker error categories for invalid payloads", async () => {
+    await expectTrackerError(
       () => service.createIssue(null),
       "tracker_unknown_payload"
     )
-    expectTrackerError(
+    await expectTrackerError(
       () =>
         service.createIssue({
           project: "radial",
         }),
       "tracker_issue_create_failed"
     )
-    expectTrackerError(
+    await expectTrackerError(
       () =>
         service.createIssue({
           project: "radial",
@@ -358,7 +367,7 @@ describe("IssueTrackerService", () => {
         }),
       "tracker_unknown_payload"
     )
-    expectTrackerError(
+    await expectTrackerError(
       () =>
         service.createIssue({
           project: "radial",
@@ -367,28 +376,31 @@ describe("IssueTrackerService", () => {
         }),
       "tracker_unknown_payload"
     )
-    expectTrackerError(
+    await expectTrackerError(
       () => service.searchIssues({ states: ["Todo"] }),
       "missing_tracker_project_slug"
     )
-    expectTrackerError(
+    await expectTrackerError(
       () => service.searchIssues({ project: "radial" }),
       "tracker_unknown_payload"
     )
-    expectTrackerError(
+    await expectTrackerError(
       () => service.lookupIssues({}),
       "tracker_unknown_payload"
     )
-    expectTrackerError(() => service.getIssue("missing"), "tracker_not_found")
+    await expectTrackerError(
+      () => service.getIssue("missing"),
+      "tracker_not_found"
+    )
   })
 })
 
-function expectTrackerError(
-  action: () => unknown,
+async function expectTrackerError(
+  action: () => Promise<unknown>,
   category: TrackerErrorBody["error"]["category"]
-) {
+): Promise<void> {
   try {
-    action()
+    await action()
   } catch (error) {
     expect(error).toBeInstanceOf(HttpException)
     const response = (error as HttpException).getResponse() as TrackerErrorBody
