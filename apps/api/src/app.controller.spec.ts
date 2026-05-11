@@ -15,8 +15,18 @@ describe("AppController", () => {
   })
 
   describe("root", () => {
-    it('should return "Hello World!"', () => {
-      expect(appController.getHello()).toBe("Hello World!")
+    it("should return service metadata", () => {
+      expect(appController.getServiceInfo()).toEqual({
+        name: "radial-api",
+        version: "v1",
+        status: "ok",
+      })
+    })
+
+    it("should return health status", () => {
+      expect(appController.getHealth()).toEqual({
+        status: "ok",
+      })
     })
   })
 })
