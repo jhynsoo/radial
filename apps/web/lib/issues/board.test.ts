@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { WORKFLOW_STATES } from "../tracker/constants"
 import type { NormalizedIssue } from "../tracker/types"
 import { filterIssues, groupIssuesByState, moveIssueState } from "./board"
 
@@ -29,7 +30,12 @@ describe("board model", () => {
 
     expect(grouped.Todo).toHaveLength(1)
     expect(grouped.Done).toHaveLength(1)
+    expect(Object.keys(grouped)).toEqual([...WORKFLOW_STATES])
     expect(grouped.Backlog).toEqual([])
+    expect(grouped["In Progress"]).toEqual([])
+    expect(grouped["Human Review"]).toEqual([])
+    expect(grouped.Merging).toEqual([])
+    expect(grouped.Rework).toEqual([])
   })
 
   it("filters by title, identifier, and labels", () => {
@@ -39,6 +45,7 @@ describe("board model", () => {
     ]
 
     expect(filterIssues(issues, "rad-1")).toHaveLength(1)
+    expect(filterIssues(issues, "polish")).toHaveLength(1)
     expect(filterIssues(issues, "UI")).toHaveLength(1)
     expect(filterIssues(issues, "")).toHaveLength(2)
   })
