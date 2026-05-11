@@ -30,10 +30,15 @@ function fieldClassName(className = "") {
 }
 
 export function StateChangeForm({ issue }: { issue: IssueDetail }) {
+  const currentIsWorkflowState = isWorkflowState(issue.state)
+
   async function updateState(formData: FormData) {
     "use server"
 
     const state = formData.get("state")
+    if (state === issue.state && !isWorkflowState(state)) {
+      return
+    }
     if (!isWorkflowState(state)) {
       throw new Error("State must be a known workflow state.")
     }
@@ -53,6 +58,9 @@ export function StateChangeForm({ issue }: { issue: IssueDetail }) {
           id="issue-state"
           name="state"
         >
+          {!currentIsWorkflowState ? (
+            <option value={issue.state}>{issue.state} (current)</option>
+          ) : null}
           {WORKFLOW_STATES.map((state) => (
             <option key={state} value={state}>
               {state}

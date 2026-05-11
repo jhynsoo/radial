@@ -7,6 +7,7 @@ import {
   RelationCreateForm,
   StateChangeForm,
 } from "@/components/issues/issue-mutation-forms"
+import { safeExternalHref } from "@/lib/issues/links"
 import type { IssueDetail } from "@/lib/tracker/types"
 import { buttonVariants } from "@workspace/ui/components/button"
 import { cn } from "@workspace/ui/lib/utils"
@@ -39,8 +40,43 @@ function Section({
   )
 }
 
+function IssueLinkItem({
+  link,
+}: {
+  link: IssueDetail["links"][number]
+}) {
+  const href = safeExternalHref(link.url)
+  const className =
+    "rounded-md border border-border bg-card p-3 text-sm text-card-foreground transition hover:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+  const content = (
+    <>
+      <span className="block font-medium">{link.title ?? link.url}</span>
+      <span className="block truncate text-muted-foreground">
+        {link.type ? `${link.type} - ` : ""}
+        {link.url}
+      </span>
+    </>
+  )
+
+  if (!href) {
+    return <div className={className}>{content}</div>
+  }
+
+  return (
+    <a
+      className={className}
+      href={href}
+      rel="noreferrer"
+      target="_blank"
+    >
+      {content}
+    </a>
+  )
+}
+
 export function IssueDetailView({ issue }: { issue: IssueDetail }) {
   const blockerCount = issue.blocked_by.length
+  const sourceHref = safeExternalHref(issue.url)
 
   return (
     <main className="min-h-svh bg-background text-foreground">
@@ -52,15 +88,19 @@ export function IssueDetailView({ issue }: { issue: IssueDetail }) {
           >
             Back to board
           </Link>
-          {issue.url ? (
+          {sourceHref ? (
             <a
               className={cn(buttonVariants({ variant: "outline" }), "h-7")}
-              href={issue.url}
+              href={sourceHref}
               rel="noreferrer"
               target="_blank"
             >
               Source issue
             </a>
+          ) : issue.url ? (
+            <span className="max-w-full truncate text-xs text-muted-foreground">
+              Source: {issue.url}
+            </span>
           ) : null}
         </div>
 
@@ -116,21 +156,7 @@ export function IssueDetailView({ issue }: { issue: IssueDetail }) {
               <div className="flex flex-col gap-2">
                 {issue.links.length > 0 ? (
                   issue.links.map((link) => (
-                    <a
-                      className="rounded-md border border-border bg-card p-3 text-sm text-card-foreground transition hover:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
-                      href={link.url}
-                      key={link.id}
-                      rel="noreferrer"
-                      target="_blank"
-                    >
-                      <span className="block font-medium">
-                        {link.title ?? link.url}
-                      </span>
-                      <span className="block truncate text-muted-foreground">
-                        {link.type ? `${link.type} - ` : ""}
-                        {link.url}
-                      </span>
-                    </a>
+                    <IssueLinkItem key={link.id} link={link} />
                   ))
                 ) : (
                   <p className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">
