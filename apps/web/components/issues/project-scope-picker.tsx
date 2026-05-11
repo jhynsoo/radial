@@ -12,6 +12,16 @@ type ProjectScopePickerProps = {
 
 const RECENT_PROJECTS_KEY = "radial.recentProjects"
 
+function normalizeRecentProjects(projects: string[]) {
+  return Array.from(
+    new Set(
+      projects
+        .map((project) => project.trim())
+        .filter((project) => project.length > 0)
+    )
+  ).slice(0, 5)
+}
+
 function readRecentProjects() {
   try {
     const value = window.localStorage.getItem(RECENT_PROJECTS_KEY)
@@ -24,9 +34,8 @@ function readRecentProjects() {
       return []
     }
 
-    return parsed.filter(
-      (project): project is string =>
-        typeof project === "string" && project.trim().length > 0
+    return normalizeRecentProjects(
+      parsed.filter((project): project is string => typeof project === "string")
     )
   } catch {
     return []
@@ -34,10 +43,18 @@ function readRecentProjects() {
 }
 
 function rememberProject(project: string, recentProjects: string[]) {
-  return [
-    project,
-    ...recentProjects.filter((recentProject) => recentProject !== project),
-  ].slice(0, 5)
+  return normalizeRecentProjects([project, ...recentProjects])
+}
+
+function writeRecentProjects(projects: string[]) {
+  try {
+    window.localStorage.setItem(
+      RECENT_PROJECTS_KEY,
+      JSON.stringify(normalizeRecentProjects(projects))
+    )
+  } catch {
+    // Recent projects are a convenience. Navigation must not depend on storage.
+  }
 }
 
 function ProjectScopePicker({ currentProject }: ProjectScopePickerProps) {
@@ -68,10 +85,7 @@ function ProjectScopePicker({ currentProject }: ProjectScopePickerProps) {
           trimmedProject,
           currentRecentProjects
         )
-        window.localStorage.setItem(
-          RECENT_PROJECTS_KEY,
-          JSON.stringify(nextRecentProjects)
-        )
+        writeRecentProjects(nextRecentProjects)
         return nextRecentProjects
       })
 
