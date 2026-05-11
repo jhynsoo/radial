@@ -90,7 +90,9 @@ export interface CurrentUser {
 
 export interface SearchIssuesBody {
   project: string
-  states: readonly string[]
+  active_states?: readonly string[]
+  states?: readonly string[]
+  assignee?: string
 }
 
 export interface CreateIssueBody {
@@ -99,6 +101,8 @@ export interface CreateIssueBody {
   description?: string
   state?: string
   state_name?: string
+  branch_name?: string
+  url?: string
   priority?: number | null
   labels?: string[]
   assignee?: string
