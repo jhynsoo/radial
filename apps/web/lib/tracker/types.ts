@@ -88,10 +88,12 @@ export interface CurrentUser {
   email: string | null
 }
 
-export interface SearchIssuesBody {
+type SearchIssueStateFilter =
+  | { active_states: readonly string[]; states?: readonly string[] }
+  | { active_states?: readonly string[]; states: readonly string[] }
+
+export type SearchIssuesBody = SearchIssueStateFilter & {
   project: string
-  active_states?: readonly string[]
-  states?: readonly string[]
   assignee?: string
 }
 
