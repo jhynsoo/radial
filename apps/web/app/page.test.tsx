@@ -8,9 +8,17 @@ const { searchIssuesMock } = vi.hoisted(() => ({
 }))
 
 vi.mock("@/components/issues/board-toolbar", () => ({
-  BoardToolbar: ({ project, query }: { project: string; query: string }) => (
+  BoardToolbar: ({
+    issueCount,
+    project,
+    query,
+  }: {
+    issueCount: number
+    project: string
+    query: string
+  }) => (
     <div data-testid="toolbar">
-      {project}:{query}
+      {project}:{query}:{issueCount}
     </div>
   ),
 }))
@@ -80,14 +88,14 @@ describe("Page", () => {
           project: [" radial ", "ignored"],
           q: [" auth ", "ignored"],
         }),
-      }),
+      })
     )
 
     expect(searchIssuesMock).toHaveBeenCalledWith({
       project: "radial",
       states: expect.any(Array),
     })
-    expect(screen.getByTestId("toolbar")).toHaveTextContent("radial:auth")
+    expect(screen.getByTestId("toolbar")).toHaveTextContent("radial:auth:1")
     expect(screen.getByTestId("board")).toHaveTextContent("RAD-1")
     expect(screen.getByTestId("board")).not.toHaveTextContent("RAD-2")
   })
@@ -101,12 +109,12 @@ describe("Page", () => {
     render(
       await Page({
         searchParams: Promise.resolve({ project: "radial", q: "auth" }),
-      }),
+      })
     )
 
-    expect(screen.getByTestId("toolbar")).toHaveTextContent("radial:auth")
+    expect(screen.getByTestId("toolbar")).toHaveTextContent("radial:auth:0")
     expect(
-      screen.getByText("tracker_request_failed: Tracker unavailable."),
+      screen.getByText("tracker_request_failed: Tracker unavailable.")
     ).toBeInTheDocument()
     expect(screen.getByTestId("board")).toHaveTextContent("")
   })
@@ -119,14 +127,14 @@ describe("Page", () => {
     const { rerender } = render(
       await Page({
         searchParams: Promise.resolve({ project: "radial", q: "auth" }),
-      }),
+      })
     )
     expect(screen.getByTestId("board")).toHaveTextContent("RAD-1")
 
     rerender(
       await Page({
         searchParams: Promise.resolve({ project: "other", q: "billing" }),
-      }),
+      })
     )
 
     expect(screen.getByTestId("board")).toHaveTextContent("RAD-2")
