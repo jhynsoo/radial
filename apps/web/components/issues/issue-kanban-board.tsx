@@ -68,7 +68,7 @@ function IssueKanbanBoard({ issues }: IssueKanbanBoardProps) {
   }
 
   return (
-    <div className="flex min-w-0 flex-col gap-3">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
       {error ? (
         <p
           className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
@@ -78,7 +78,7 @@ function IssueKanbanBoard({ issues }: IssueKanbanBoardProps) {
         </p>
       ) : null}
       <DndContext onDragEnd={handleDragEnd}>
-        <div className="flex min-w-0 gap-3 overflow-x-auto pb-2">
+        <div className="flex min-h-[calc(100svh-12rem)] min-w-0 flex-1 items-stretch gap-3 overflow-x-auto rounded-md border border-border/80 bg-background/70 p-3 pb-4 shadow-xs">
           {WORKFLOW_STATES.map((state) => (
             <IssueColumn
               count={groupedIssues[state].length}

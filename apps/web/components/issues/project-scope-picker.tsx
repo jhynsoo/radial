@@ -5,8 +5,10 @@ import { FolderOpen, History } from "lucide-react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
 import { Button } from "@workspace/ui/components/button"
+import { cn } from "@workspace/ui/lib/utils"
 
 type ProjectScopePickerProps = {
+  className?: string
   currentProject: string
 }
 
@@ -57,7 +59,10 @@ function writeRecentProjects(projects: string[]) {
   }
 }
 
-function ProjectScopePicker({ currentProject }: ProjectScopePickerProps) {
+function ProjectScopePicker({
+  className,
+  currentProject,
+}: ProjectScopePickerProps) {
   const pathname = usePathname()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -98,7 +103,7 @@ function ProjectScopePicker({ currentProject }: ProjectScopePickerProps) {
 
   return (
     <form
-      className="flex flex-col gap-2"
+      className={cn("flex min-w-0 flex-col gap-2", className)}
       onSubmit={(event) => {
         event.preventDefault()
         openProject(project)
@@ -108,11 +113,12 @@ function ProjectScopePicker({ currentProject }: ProjectScopePickerProps) {
         <label className="text-sm font-medium" htmlFor="project-scope">
           Project
         </label>
-        <div className="flex gap-2">
+        <div className="flex min-w-0 gap-2">
           <input
-            className="h-8 min-w-0 flex-1 rounded-lg border border-input bg-background px-2.5 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            className="h-8 min-w-0 flex-1 rounded-lg border border-input bg-background px-2.5 text-sm transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
             id="project-scope"
             name="project"
+            placeholder="Project slug"
             value={project}
             onChange={(event) => setProject(event.target.value)}
           />
