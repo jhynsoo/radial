@@ -1,6 +1,7 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "ui": "tui",
+  "globalEnv": ["TRACKER_API_BASE_URL", "TRACKER_API_KEY"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
