@@ -1,7 +1,11 @@
 "use client"
 
 import * as React from "react"
-import { DndContext, type DragEndEvent } from "@dnd-kit/core"
+import {
+  closestCenter,
+  DndContext,
+  type DragEndEvent,
+} from "@dnd-kit/core"
 
 import { updateIssueStateAction } from "@/app/issues/actions"
 import { IssueCard } from "@/components/issues/issue-card"
@@ -77,7 +81,11 @@ function IssueKanbanBoard({ issues }: IssueKanbanBoardProps) {
           {error}
         </p>
       ) : null}
-      <DndContext onDragEnd={handleDragEnd}>
+      <DndContext
+        collisionDetection={closestCenter}
+        id="issue-kanban-board"
+        onDragEnd={handleDragEnd}
+      >
         <div className="flex min-h-[calc(100svh-12rem)] min-w-0 flex-1 items-stretch gap-3 overflow-x-auto rounded-md border border-border/80 bg-background/70 p-3 pb-4 shadow-xs">
           {WORKFLOW_STATES.map((state) => (
             <IssueColumn

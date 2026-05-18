@@ -194,6 +194,13 @@ describe("AppController (e2e)", () => {
       .expect({ comments: [] })
 
     await request(app.getHttpServer())
+      .get(`/api/v1/issues/${issue.id}`)
+      .expect(200)
+      .expect((response) => {
+        expect((response.body as IssueResponse).issue.comments).toEqual([])
+      })
+
+    await request(app.getHttpServer())
       .get(`/api/v1/issues/${issue.id}/comments?include_resolved=true`)
       .expect(200)
       .expect((response) => {

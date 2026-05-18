@@ -367,7 +367,7 @@ export class IssueTrackerService {
     return {
       ...(await this.toNormalizedIssue(issue)),
       project: issue.project,
-      comments: issue.comments,
+      comments: issue.comments.filter((comment) => !comment.resolved),
       links: issue.links,
       relations: issue.relations,
     }

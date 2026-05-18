@@ -148,9 +148,11 @@ test("moves an issue between board columns with drag and drop", async ({
   await expect(todoColumn.getByText("Fix API contract search")).toBeVisible()
   await expect(inProgressColumn.getByText("Fix API contract search")).toBeHidden()
 
-  await page
-    .getByRole("button", { name: "Drag issue RAD-2" })
-    .dragTo(inProgressColumn)
+  await dragIssueToColumn(
+    page,
+    page.getByRole("button", { name: "Drag issue RAD-2" }),
+    inProgressColumn
+  )
 
   await expect(inProgressColumn.getByText("Fix API contract search"))
     .toBeVisible()
@@ -168,6 +170,31 @@ function issueHeader(page: Page): Locator {
 
 function issueColumn(page: Page, state: string): Locator {
   return page.getByRole("region", { name: `${state} issue column` })
+}
+
+async function dragIssueToColumn(
+  page: Page,
+  dragHandle: Locator,
+  column: Locator
+) {
+  const sourceBox = await dragHandle.boundingBox()
+  const targetBox = await column.boundingBox()
+
+  if (!sourceBox || !targetBox) {
+    throw new Error("Drag source or target column was not visible.")
+  }
+
+  await page.mouse.move(
+    sourceBox.x + sourceBox.width / 2,
+    sourceBox.y + sourceBox.height / 2
+  )
+  await page.mouse.down()
+  await page.mouse.move(
+    targetBox.x + targetBox.width / 2,
+    targetBox.y + targetBox.height / 2,
+    { steps: 12 }
+  )
+  await page.mouse.up()
 }
 
 function detailSection(page: Page, heading: string): Locator {
