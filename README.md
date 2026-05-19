@@ -58,6 +58,99 @@ Open:
 - Web: `http://localhost:3000`
 - API health: `http://localhost:3001/api/health`
 
+## Docker
+
+Docker has separate commands for development and production. Both modes read `.env`, but the recommended source template is different.
+
+### Development
+
+Copy the development env template:
+
+```bash
+cp .env.dev.example .env
+```
+
+Start the Web, API, and local Postgres services:
+
+```bash
+docker compose -f docker-compose.dev.yml up --build
+```
+
+Apply database migrations to the local Postgres container:
+
+```bash
+docker compose -f docker-compose.dev.yml run --rm api pnpm db:migrate
+```
+
+Open:
+
+- Web: `http://localhost:3000`
+- API health: `http://localhost:3001/api/health`
+
+By default, Docker development uses the Postgres container:
+
+```env
+DATABASE_URL="postgresql://radial:radial@postgres:5432/radial?schema=public"
+```
+
+To use Neon instead, edit `.env` and replace only `DATABASE_URL` with the Neon connection string. Keep `TRACKER_API_BASE_URL` as Docker service DNS:
+
+```env
+TRACKER_API_BASE_URL="http://api:3001/api/v1"
+```
+
+### Production
+
+Copy the production env template and replace all placeholder values:
+
+```bash
+cp .env.prod.example .env
+```
+
+Build the production images:
+
+```bash
+docker compose build
+```
+
+Run migrations with Prisma's production migration command:
+
+```bash
+docker compose --profile tools run --rm migrate
+```
+
+Start the production API and Web containers:
+
+```bash
+docker compose up -d api web
+```
+
+Open:
+
+- Web: `http://localhost:3000`
+- API health: `http://localhost:3001/api/health`
+
+Production uses optimized runtime targets from `Dockerfile`:
+
+- `api-runner`: runs the compiled NestJS API with `node dist/src/main.js`.
+- `web-runner`: runs the Next.js standalone server with `node server.js`.
+- `api-migrator`: runs `pnpm --filter api db:migrate:deploy` as a one-off migration container.
+
+Set production database and public URLs in `.env`:
+
+```env
+DATABASE_URL="postgresql://user:password@ep-example.us-east-1.aws.neon.tech/radial?sslmode=require"
+TRACKER_PUBLIC_URL="https://radial.example.com/api/v1"
+TRACKER_API_BASE_URL="http://api:3001/api/v1"
+TRACKER_API_KEY="replace-with-a-long-random-production-token"
+```
+
+For Cloudflare Tunnel, publish only the Web app:
+
+```text
+Cloudflare Tunnel -> http://localhost:3000
+```
+
 ### Useful Commands
 
 ```bash
@@ -65,7 +158,8 @@ pnpm dev          # Start all workspace development tasks
 pnpm dev:api      # Start only the API
 pnpm dev:web      # Start only the web app
 pnpm db:generate  # Generate the Prisma client for the API
-pnpm db:migrate   # Apply API migrations to the configured Neon database
+pnpm db:migrate   # Apply API migrations to the configured database
+pnpm db:migrate:deploy # Apply committed API migrations in production mode
 pnpm lint         # Run workspace lint tasks
 pnpm typecheck    # Run workspace type checks
 pnpm build        # Build the workspace

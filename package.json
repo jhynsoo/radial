@@ -9,6 +9,7 @@
     "dev:web": "pnpm --filter web dev",
     "db:generate": "pnpm --filter api db:generate",
     "db:migrate": "pnpm --filter api db:migrate",
+    "db:migrate:deploy": "pnpm --filter api db:migrate:deploy",
     "lint": "turbo lint",
     "format": "turbo format",
     "typecheck": "turbo typecheck"
