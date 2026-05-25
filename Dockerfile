@@ -41,6 +41,7 @@ RUN pnpm build
 FROM builder AS api-deploy
 
 RUN pnpm --filter api deploy --prod /prod/api
+RUN cd /prod/api && /app/apps/api/node_modules/.bin/prisma generate --schema prisma/schema.prisma
 
 FROM base AS api-runner
 
