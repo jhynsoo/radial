@@ -30,8 +30,6 @@ services:
     environment:
       NODE_ENV: production
       PORT: ${API_CONTAINER_PORT:-3001}
-    ports:
-      - "${API_BIND_HOST:-127.0.0.1}:${API_PUBLISHED_PORT:-3001}:${API_CONTAINER_PORT:-3001}"
     restart: unless-stopped
     depends_on:
       radial-db:
@@ -60,8 +58,6 @@ services:
       NODE_ENV: production
       PORT: ${WEB_CONTAINER_PORT:-3000}
       HOSTNAME: 0.0.0.0
-    ports:
-      - "${WEB_BIND_HOST:-127.0.0.1}:${WEB_PUBLISHED_PORT:-3000}:${WEB_CONTAINER_PORT:-3000}"
     restart: unless-stopped
     depends_on:
       radial-api:
@@ -88,3 +84,7 @@ services:
 
 volumes:
   postgres-data:
+
+networks:
+  default:
+    name: radial-network

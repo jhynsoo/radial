@@ -86,10 +86,10 @@ Start the production Postgres, API, and Web containers:
 docker compose up -d
 ```
 
-Open:
+The stack does not publish host ports. Attach a reverse proxy or Cloudflare Tunnel container to the `radial-network` Docker network and route traffic to:
 
-- Web: `http://localhost:3000`
-- API health: `http://localhost:3001/api/health`
+- Web: `http://radial-web:3000`
+- API: `http://radial-api:3001`
 
 Production uses optimized runtime targets from `Dockerfile`:
 
@@ -101,6 +101,8 @@ Production uses optimized runtime targets from `Dockerfile`:
 Set production database and public URLs in `.env`:
 
 ```env
+API_CONTAINER_PORT=3001
+WEB_CONTAINER_PORT=3000
 POSTGRES_USER=radial
 POSTGRES_PASSWORD=replace-with-a-strong-postgres-password
 POSTGRES_DB=radial
@@ -112,11 +114,13 @@ TRACKER_API_KEY="replace-with-a-long-random-production-token"
 
 Keep `POSTGRES_PASSWORD` and the password part of `DATABASE_URL` identical.
 
-For Cloudflare Tunnel, publish only the Web app:
+For a separate Cloudflare Tunnel container, connect it to the Compose network:
 
-```text
-Cloudflare Tunnel -> http://localhost:3000
+```bash
+docker network connect radial-network <cloudflared-container-name>
 ```
+
+Then set the tunnel service target to `http://radial-web:3000`.
 
 ### Useful Commands
 
