@@ -1,4 +1,22 @@
 services:
+  postgres:
+    image: postgres:17-alpine
+    env_file:
+      - .env
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U $${POSTGRES_USER:-radial} -d $${POSTGRES_DB:-radial}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
   api:
     build:
       context: .
@@ -13,6 +31,9 @@ services:
     ports:
       - "${API_BIND_HOST:-127.0.0.1}:${API_PUBLISHED_PORT:-3001}:${API_CONTAINER_PORT:-3001}"
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test:
         [
@@ -54,6 +75,12 @@ services:
     environment:
       NODE_ENV: production
     command: pnpm --filter api db:migrate:deploy
+    depends_on:
+      postgres:
+        condition: service_healthy
     profiles:
       - tools
     restart: "no"
+
+volumes:
+  postgres-data:

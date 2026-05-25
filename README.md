@@ -119,10 +119,10 @@ Run migrations with Prisma's production migration command:
 docker compose --profile tools run --rm migrate
 ```
 
-Start the production API and Web containers:
+Start the production Postgres, API, and Web containers:
 
 ```bash
-docker compose up -d api web
+docker compose up -d
 ```
 
 Open:
@@ -132,6 +132,7 @@ Open:
 
 Production uses optimized runtime targets from `Dockerfile`:
 
+- `postgres`: runs the production Postgres database with data persisted in the `postgres-data` Docker volume.
 - `api-runner`: runs the compiled NestJS API with `node dist/src/main.js`.
 - `web-runner`: runs the Next.js standalone server with `node server.js`.
 - `api-migrator`: runs `pnpm --filter api db:migrate:deploy` as a one-off migration container.
@@ -139,11 +140,16 @@ Production uses optimized runtime targets from `Dockerfile`:
 Set production database and public URLs in `.env`:
 
 ```env
-DATABASE_URL="postgresql://user:password@ep-example.us-east-1.aws.neon.tech/radial?sslmode=require"
+POSTGRES_USER=radial
+POSTGRES_PASSWORD=replace-with-a-strong-postgres-password
+POSTGRES_DB=radial
+DATABASE_URL="postgresql://radial:replace-with-a-strong-postgres-password@postgres:5432/radial?schema=public"
 TRACKER_PUBLIC_URL="https://radial.example.com/api/v1"
 TRACKER_API_BASE_URL="http://api:3001/api/v1"
 TRACKER_API_KEY="replace-with-a-long-random-production-token"
 ```
+
+Keep `POSTGRES_PASSWORD` and the password part of `DATABASE_URL` identical.
 
 For Cloudflare Tunnel, publish only the Web app:
 
