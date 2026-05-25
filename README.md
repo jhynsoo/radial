@@ -60,46 +60,7 @@ Open:
 
 ## Docker
 
-Docker has separate commands for development and production. Both modes read `.env`, but the recommended source template is different.
-
-### Development
-
-Copy the development env template:
-
-```bash
-cp .env.dev.example .env
-```
-
-Start the Web, API, and local Postgres services:
-
-```bash
-docker compose -f docker-compose.dev.yml up --build
-```
-
-Apply database migrations to the local Postgres container:
-
-```bash
-docker compose -f docker-compose.dev.yml run --rm api pnpm db:migrate
-```
-
-Open:
-
-- Web: `http://localhost:3000`
-- API health: `http://localhost:3001/api/health`
-
-By default, Docker development uses the Postgres container:
-
-```env
-DATABASE_URL="postgresql://radial:radial@postgres:5432/radial?schema=public"
-```
-
-To use Neon instead, edit `.env` and replace only `DATABASE_URL` with the Neon connection string. Keep `TRACKER_API_BASE_URL` as Docker service DNS:
-
-```env
-TRACKER_API_BASE_URL="http://api:3001/api/v1"
-```
-
-### Production
+Docker is configured for deployment. The Compose stack runs Postgres, API, Web, and a one-off migration service on one machine.
 
 Copy the production env template and replace all placeholder values:
 
@@ -116,7 +77,7 @@ docker compose build
 Run migrations with Prisma's production migration command:
 
 ```bash
-docker compose --profile tools run --rm migrate
+docker compose --profile tools run --rm radial-migrate
 ```
 
 Start the production Postgres, API, and Web containers:
@@ -132,10 +93,10 @@ Open:
 
 Production uses optimized runtime targets from `Dockerfile`:
 
-- `postgres`: runs the production Postgres database with data persisted in the `postgres-data` Docker volume.
-- `api-runner`: runs the compiled NestJS API with `node dist/src/main.js`.
-- `web-runner`: runs the Next.js standalone server with `node server.js`.
-- `api-migrator`: runs `pnpm --filter api db:migrate:deploy` as a one-off migration container.
+- `radial-db`: runs the production Postgres database with data persisted in the `postgres-data` Docker volume.
+- `radial-api`: runs the compiled NestJS API with `node dist/src/main.js`.
+- `radial-web`: runs the Next.js standalone server with `node server.js`.
+- `radial-migrate`: runs `pnpm --filter api db:migrate:deploy` as a one-off migration container.
 
 Set production database and public URLs in `.env`:
 
@@ -143,9 +104,9 @@ Set production database and public URLs in `.env`:
 POSTGRES_USER=radial
 POSTGRES_PASSWORD=replace-with-a-strong-postgres-password
 POSTGRES_DB=radial
-DATABASE_URL="postgresql://radial:replace-with-a-strong-postgres-password@postgres:5432/radial?schema=public"
+DATABASE_URL="postgresql://radial:replace-with-a-strong-postgres-password@radial-db:5432/radial?schema=public"
 TRACKER_PUBLIC_URL="https://radial.example.com/api/v1"
-TRACKER_API_BASE_URL="http://api:3001/api/v1"
+TRACKER_API_BASE_URL="http://radial-api:3001/api/v1"
 TRACKER_API_KEY="replace-with-a-long-random-production-token"
 ```
 

@@ -1,6 +1,7 @@
 services:
-  postgres:
+  radial-db:
     image: postgres:17-alpine
+    container_name: radial-db
     env_file:
       - .env
     volumes:
@@ -17,11 +18,12 @@ services:
       retries: 12
       start_period: 10s
 
-  api:
+  radial-api:
     build:
       context: .
       dockerfile: Dockerfile
       target: api-runner
+    container_name: radial-api
     image: ${RADIAL_API_IMAGE:-radial-api:latest}
     env_file:
       - .env
@@ -32,7 +34,7 @@ services:
       - "${API_BIND_HOST:-127.0.0.1}:${API_PUBLISHED_PORT:-3001}:${API_CONTAINER_PORT:-3001}"
     restart: unless-stopped
     depends_on:
-      postgres:
+      radial-db:
         condition: service_healthy
     healthcheck:
       test:
@@ -45,11 +47,12 @@ services:
       retries: 12
       start_period: 20s
 
-  web:
+  radial-web:
     build:
       context: .
       dockerfile: Dockerfile
       target: web-runner
+    container_name: radial-web
     image: ${RADIAL_WEB_IMAGE:-radial-web:latest}
     env_file:
       - .env
@@ -61,14 +64,15 @@ services:
       - "${WEB_BIND_HOST:-127.0.0.1}:${WEB_PUBLISHED_PORT:-3000}:${WEB_CONTAINER_PORT:-3000}"
     restart: unless-stopped
     depends_on:
-      api:
+      radial-api:
         condition: service_healthy
 
-  migrate:
+  radial-migrate:
     build:
       context: .
       dockerfile: Dockerfile
       target: api-migrator
+    container_name: radial-migrate
     image: ${RADIAL_MIGRATOR_IMAGE:-radial-api-migrator:latest}
     env_file:
       - .env
@@ -76,7 +80,7 @@ services:
       NODE_ENV: production
     command: pnpm --filter api db:migrate:deploy
     depends_on:
-      postgres:
+      radial-db:
         condition: service_healthy
     profiles:
       - tools
