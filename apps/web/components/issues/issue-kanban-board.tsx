@@ -19,10 +19,7 @@ import {
   updateIssueStateInColumns,
   type IssuesByState,
 } from "@/lib/issues/board"
-import {
-  WORKFLOW_STATES,
-  type WorkflowState,
-} from "@/lib/tracker/constants"
+import { WORKFLOW_STATES, type WorkflowState } from "@/lib/tracker/constants"
 import type { NormalizedIssue } from "@/lib/tracker/types"
 
 type IssueKanbanBoardProps = {
@@ -165,7 +162,9 @@ function IssueKanbanBoard({ issues }: IssueKanbanBoardProps) {
           return
         }
 
-        updateColumns(updateIssueStateInColumns(nextColumns, issueId, nextState))
+        updateColumns(
+          updateIssueStateInColumns(nextColumns, issueId, nextState)
+        )
         setError(null)
 
         const token = Symbol(issueId)

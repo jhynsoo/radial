@@ -60,11 +60,13 @@ test("creates an issue from the board and returns to the updated board", async (
   await page.getByRole("button", { name: "Create issue" }).click()
 
   await expect(page).toHaveURL(/\/issues\/issue-6$/)
-  await expect(page.getByRole("heading", { name: "Document e2e user flows" }))
-    .toBeVisible()
+  await expect(
+    page.getByRole("heading", { name: "Document e2e user flows" })
+  ).toBeVisible()
   await expect(page.getByText("RAD-6")).toBeVisible()
-  await expect(page.getByText("Cover the browser flows that users rely on."))
-    .toBeVisible()
+  await expect(
+    page.getByText("Cover the browser flows that users rely on.")
+  ).toBeVisible()
   await expect(page.getByText("P2")).toBeVisible()
   await expect(page.getByText("codex/e2e-flows")).toBeVisible()
   await expect(page.getByText("test")).toBeVisible()
@@ -81,8 +83,9 @@ test("updates issue detail workflow, comments, links, and relations", async ({
 }) => {
   await page.goto("/issues/issue-2")
 
-  await expect(page.getByRole("heading", { name: "Fix API contract search" }))
-    .toBeVisible()
+  await expect(
+    page.getByRole("heading", { name: "Fix API contract search" })
+  ).toBeVisible()
 
   await page.getByLabel("State").selectOption("Human Review")
   await page.getByRole("button", { name: "Update" }).click()
@@ -90,7 +93,9 @@ test("updates issue detail workflow, comments, links, and relations", async ({
 
   await page.getByLabel("New comment").fill("Initial operational note")
   await page.getByRole("button", { name: "Add comment" }).click()
-  await expect(page.getByRole("heading", { name: "Comments (1)" })).toBeVisible()
+  await expect(
+    page.getByRole("heading", { name: "Comments (1)" })
+  ).toBeVisible()
   await expect(page.getByLabel("Comment body")).toHaveValue(
     "Initial operational note"
   )
@@ -113,7 +118,9 @@ test("updates issue detail workflow, comments, links, and relations", async ({
     await dialog.accept()
   })
   await page.getByRole("button", { name: "Deactivate" }).click()
-  await expect(page.getByRole("heading", { name: "Comments (0)" })).toBeVisible()
+  await expect(
+    page.getByRole("heading", { name: "Comments (0)" })
+  ).toBeVisible()
   await expect(page.getByText("No comments.")).toBeVisible()
 
   await page.getByLabel("URL").fill("https://example.com/spec")
@@ -129,12 +136,16 @@ test("updates issue detail workflow, comments, links, and relations", async ({
   await page.getByLabel("Relation type").selectOption("blocked_by")
   await page.getByLabel("Target issue ID").fill("issue-1")
   await page.getByRole("button", { name: "Add relation" }).click()
-  await expect(page.getByRole("heading", { name: "Relations (1)" })).toBeVisible()
+  await expect(
+    page.getByRole("heading", { name: "Relations (1)" })
+  ).toBeVisible()
   const relationSection = detailSection(page, "Relations (1)")
-  await expect(relationSection.locator("span", { hasText: "blocked_by" }))
-    .toBeVisible()
-  await expect(relationSection.locator("span", { hasText: "issue-1" }))
-    .toBeVisible()
+  await expect(
+    relationSection.locator("span", { hasText: "blocked_by" })
+  ).toBeVisible()
+  await expect(
+    relationSection.locator("span", { hasText: "issue-1" })
+  ).toBeVisible()
 })
 
 test("opens an issue detail from the board card link", async ({ page }) => {
@@ -145,8 +156,9 @@ test("opens an issue detail from the board card link", async ({ page }) => {
     .click()
 
   await expect(page).toHaveURL(/\/issues\/issue-2$/)
-  await expect(page.getByRole("heading", { name: "Fix API contract search" }))
-    .toBeVisible()
+  await expect(
+    page.getByRole("heading", { name: "Fix API contract search" })
+  ).toBeVisible()
 })
 
 test("moves an issue between board columns with drag and drop", async ({
@@ -158,7 +170,9 @@ test("moves an issue between board columns with drag and drop", async ({
   const inProgressColumn = issueColumn(page, "In Progress")
 
   await expect(todoColumn.getByText("Fix API contract search")).toBeVisible()
-  await expect(inProgressColumn.getByText("Fix API contract search")).toBeHidden()
+  await expect(
+    inProgressColumn.getByText("Fix API contract search")
+  ).toBeHidden()
 
   await dragIssueToColumn(
     page,
@@ -166,14 +180,16 @@ test("moves an issue between board columns with drag and drop", async ({
     inProgressColumn
   )
 
-  await expect(inProgressColumn.getByText("Fix API contract search"))
-    .toBeVisible()
+  await expect(
+    inProgressColumn.getByText("Fix API contract search")
+  ).toBeVisible()
   await expect(todoColumn.getByText("Fix API contract search")).toBeHidden()
 
   await page.reload()
 
-  await expect(inProgressColumn.getByText("Fix API contract search"))
-    .toBeVisible()
+  await expect(
+    inProgressColumn.getByText("Fix API contract search")
+  ).toBeVisible()
 })
 
 function issueHeader(page: Page): Locator {

@@ -1,46 +1,46 @@
-import * as React from "react";
+import * as React from "react"
 
-type PossibleRef<T> = React.Ref<T> | undefined;
+type PossibleRef<T> = React.Ref<T> | undefined
 
 function setRef<T>(ref: PossibleRef<T>, value: T) {
   if (typeof ref === "function") {
-    return ref(value);
+    return ref(value)
   }
 
   if (ref !== null && ref !== undefined) {
-    ref.current = value;
+    ref.current = value
   }
 }
 
 function composeRefs<T>(...refs: PossibleRef<T>[]): React.RefCallback<T> {
   return (node) => {
-    let hasCleanup = false;
+    let hasCleanup = false
     const cleanups = refs.map((ref) => {
-      const cleanup = setRef(ref, node);
+      const cleanup = setRef(ref, node)
       if (!hasCleanup && typeof cleanup === "function") {
-        hasCleanup = true;
+        hasCleanup = true
       }
-      return cleanup;
-    });
+      return cleanup
+    })
 
     if (hasCleanup) {
       return () => {
         for (let i = 0; i < cleanups.length; i++) {
-          const cleanup = cleanups[i];
+          const cleanup = cleanups[i]
           if (typeof cleanup === "function") {
-            cleanup();
+            cleanup()
           } else {
-            setRef(refs[i], null);
+            setRef(refs[i], null)
           }
         }
-      };
+      }
     }
-  };
+  }
 }
 
 function useComposedRefs<T>(...refs: PossibleRef<T>[]): React.RefCallback<T> {
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  return React.useCallback(composeRefs(...refs), refs);
+  return React.useCallback(composeRefs(...refs), refs)
 }
 
-export { composeRefs, useComposedRefs };
+export { composeRefs, useComposedRefs }
