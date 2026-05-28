@@ -55,6 +55,35 @@ const directions: string[] = [
   KeyboardCode.Left,
 ]
 
+const interactiveElementSelector = [
+  "a[href]",
+  "button",
+  "input",
+  "select",
+  "textarea",
+  "[contenteditable='true']",
+  "[data-kanban-interactive]",
+].join(",")
+
+function isInteractiveEventTarget(target: EventTarget | null) {
+  if (!(target instanceof Element)) return false
+
+  return target.closest(interactiveElementSelector) !== null
+}
+
+function getKeyboardSafeListeners(listeners: DraggableSyntheticListeners) {
+  if (!listeners?.onKeyDown) return listeners
+
+  return {
+    ...listeners,
+    onKeyDown(event: React.KeyboardEvent) {
+      if (isInteractiveEventTarget(event.target)) return
+
+      listeners.onKeyDown?.(event)
+    },
+  }
+}
+
 const coordinateGetter: KeyboardCoordinateGetter = (event, { context }) => {
   const { active, droppableRects, droppableContainers, collisionRect } = context
 
@@ -774,6 +803,9 @@ function KanbanColumn(props: KanbanColumnProps) {
   const composedRef = useComposedRefs(ref, (node) => {
     if (disabled) return
     setNodeRef(node)
+    if (asHandle) {
+      setActivatorNodeRef(node)
+    }
   })
 
   const composedStyle = React.useMemo<React.CSSProperties>(() => {
@@ -804,17 +836,14 @@ function KanbanColumn(props: KanbanColumnProps) {
   )
 
   const ColumnPrimitive = asChild ? SlotPrimitive : "div"
+  const keyboardSafeListeners = React.useMemo(
+    () => getKeyboardSafeListeners(listeners),
+    [listeners]
+  )
 
   return (
     <KanbanColumnContext.Provider value={columnContext}>
-      <SortableContext
-        items={items}
-        strategy={
-          context.orientation === "horizontal"
-            ? horizontalListSortingStrategy
-            : verticalListSortingStrategy
-        }
-      >
+      <SortableContext items={items} strategy={context.strategy}>
         <ColumnPrimitive
           id={id}
           data-disabled={disabled}
@@ -822,7 +851,7 @@ function KanbanColumn(props: KanbanColumnProps) {
           data-slot="kanban-column"
           {...columnProps}
           {...(asHandle && !disabled ? attributes : {})}
-          {...(asHandle && !disabled ? listeners : {})}
+          {...(asHandle && !disabled ? keyboardSafeListeners : {})}
           ref={composedRef}
           style={composedStyle}
           className={cn(
@@ -951,6 +980,9 @@ function KanbanItem(props: KanbanItemProps) {
   const composedRef = useComposedRefs(ref, (node) => {
     if (disabled) return
     setNodeRef(node)
+    if (asHandle) {
+      setActivatorNodeRef(node)
+    }
   })
 
   const composedStyle = React.useMemo<React.CSSProperties>(() => {
@@ -974,6 +1006,10 @@ function KanbanItem(props: KanbanItemProps) {
   )
 
   const ItemPrimitive = asChild ? SlotPrimitive : "div"
+  const keyboardSafeListeners = React.useMemo(
+    () => getKeyboardSafeListeners(listeners),
+    [listeners]
+  )
 
   return (
     <KanbanItemContext.Provider value={itemContext}>
@@ -984,7 +1020,7 @@ function KanbanItem(props: KanbanItemProps) {
         data-slot="kanban-item"
         {...itemProps}
         {...(asHandle && !disabled ? attributes : {})}
-        {...(asHandle && !disabled ? listeners : {})}
+        {...(asHandle && !disabled ? keyboardSafeListeners : {})}
         ref={composedRef}
         style={composedStyle}
         className={cn(

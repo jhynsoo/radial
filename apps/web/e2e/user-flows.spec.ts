@@ -153,7 +153,8 @@ test("opens an issue detail from the board card link", async ({ page }) => {
 
   await page
     .getByRole("link", { name: /RAD-2 Fix API contract search/ })
-    .click()
+    .focus()
+  await page.keyboard.press("Enter")
 
   await expect(page).toHaveURL(/\/issues\/issue-2$/)
   await expect(
