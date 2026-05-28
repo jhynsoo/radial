@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest"
 import { WORKFLOW_STATES } from "../tracker/constants"
 import type { NormalizedIssue } from "../tracker/types"
-import { filterIssues, groupIssuesByState, moveIssueState } from "./board"
+import {
+  filterIssues,
+  findIssueColumn,
+  groupIssuesByState,
+  moveIssueState,
+  restoreCanonicalColumnOrder,
+  updateIssueStateInColumns,
+} from "./board"
 
 function issue(overrides: Partial<NormalizedIssue>): NormalizedIssue {
   return {
@@ -56,5 +63,54 @@ describe("board model", () => {
 
     expect(moved[0]?.state).toBe("In Progress")
     expect(issues[0]?.state).toBe("Todo")
+  })
+
+  it("finds the workflow column containing an issue", () => {
+    const grouped = groupIssuesByState([
+      issue({ id: "issue-1", state: "Todo" }),
+      issue({ id: "issue-2", state: "In Progress" }),
+    ])
+
+    expect(findIssueColumn(grouped, "issue-2")).toBe("In Progress")
+    expect(findIssueColumn(grouped, "missing")).toBeNull()
+  })
+
+  it("updates the moved issue state inside grouped columns", () => {
+    const grouped = groupIssuesByState([
+      issue({ id: "issue-1", state: "Todo" }),
+      issue({ id: "issue-2", state: "In Progress" }),
+      issue({ id: "issue-3", state: "Done" }),
+    ])
+
+    const updated = updateIssueStateInColumns(grouped, "issue-1", "In Progress")
+
+    expect(updated.Todo).toHaveLength(0)
+    expect(updated["In Progress"].map((candidate) => candidate.id)).toEqual([
+      "issue-2",
+      "issue-1",
+    ])
+    expect(updated["In Progress"][1]).toMatchObject({
+      id: "issue-1",
+      state: "In Progress",
+    })
+    expect(grouped.Todo[0]?.state).toBe("Todo")
+  })
+
+  it("restores canonical order from the source issue list", () => {
+    const sourceIssues = [
+      issue({ id: "issue-1", state: "Todo", title: "First" }),
+      issue({ id: "issue-2", state: "Todo", title: "Second" }),
+    ]
+    const reordered = {
+      ...groupIssuesByState(sourceIssues),
+      Todo: [sourceIssues[1]!, sourceIssues[0]!],
+    }
+
+    const restored = restoreCanonicalColumnOrder(reordered, sourceIssues)
+
+    expect(restored.Todo.map((candidate) => candidate.id)).toEqual([
+      "issue-1",
+      "issue-2",
+    ])
   })
 })
