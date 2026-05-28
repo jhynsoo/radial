@@ -24,7 +24,7 @@ test("opens a project board, filters issues, and uses recent projects", async ({
   await expect(page.getByText("Fix API contract search")).toBeVisible()
   await expect(page.getByText("Orbit only task")).toBeHidden()
 
-  await page.getByLabel("Search").fill("contract")
+  await page.getByRole("textbox", { name: "Search" }).fill("contract")
   await page.getByRole("button", { name: "Search" }).click()
 
   await expect(page).toHaveURL(/q=contract/)
@@ -137,6 +137,18 @@ test("updates issue detail workflow, comments, links, and relations", async ({
     .toBeVisible()
 })
 
+test("opens an issue detail from the board card link", async ({ page }) => {
+  await page.goto("/?project=radial")
+
+  await page
+    .getByRole("link", { name: /RAD-2 Fix API contract search/ })
+    .click()
+
+  await expect(page).toHaveURL(/\/issues\/issue-2$/)
+  await expect(page.getByRole("heading", { name: "Fix API contract search" }))
+    .toBeVisible()
+})
+
 test("moves an issue between board columns with drag and drop", async ({
   page,
 }) => {
@@ -150,7 +162,7 @@ test("moves an issue between board columns with drag and drop", async ({
 
   await dragIssueToColumn(
     page,
-    page.getByRole("button", { name: "Drag issue RAD-2" }),
+    page.getByRole("article", { name: /RAD-2 Fix API contract search/ }),
     inProgressColumn
   )
 
@@ -174,10 +186,10 @@ function issueColumn(page: Page, state: string): Locator {
 
 async function dragIssueToColumn(
   page: Page,
-  dragHandle: Locator,
+  dragTarget: Locator,
   column: Locator
 ) {
-  const sourceBox = await dragHandle.boundingBox()
+  const sourceBox = await dragTarget.boundingBox()
   const targetBox = await column.boundingBox()
 
   if (!sourceBox || !targetBox) {
@@ -186,7 +198,7 @@ async function dragIssueToColumn(
 
   await page.mouse.move(
     sourceBox.x + sourceBox.width / 2,
-    sourceBox.y + sourceBox.height / 2
+    sourceBox.y + sourceBox.height - 8
   )
   await page.mouse.down()
   await page.mouse.move(
