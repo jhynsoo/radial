@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react"
+import { render, screen, within } from "@testing-library/react"
 import { describe, expect, it } from "vitest"
 import type { NormalizedIssue } from "@/lib/tracker/types"
 import { IssueCard } from "./issue-card"
@@ -20,32 +20,31 @@ const issue: NormalizedIssue = {
 
 describe("IssueCard", () => {
   it("shows issue identity and blocker count", () => {
-    render(<IssueCard issue={issue} draggable={false} />)
-
-    expect(screen.getByText("RAD-1")).toBeInTheDocument()
-    expect(screen.getByText("Build Kanban board")).toBeInTheDocument()
-    expect(screen.getByText("1 blocker")).toBeInTheDocument()
-  })
-
-  it("renders a normal issue link without a drag handle when disabled", () => {
-    render(<IssueCard issue={issue} draggable={false} />)
-
-    expect(
-      screen.getByRole("link", { name: /Build Kanban board/ })
-    ).toHaveAttribute("href", "/issues/issue-1")
-    expect(
-      screen.queryByRole("button", { name: "Drag issue RAD-1" })
-    ).not.toBeInTheDocument()
-  })
-
-  it("renders a separate drag handle when draggable", () => {
     render(<IssueCard issue={issue} />)
 
     expect(
-      screen.getByRole("button", { name: "Drag issue RAD-1" })
+      screen.getByRole("article", { name: "RAD-1 Build Kanban board" })
     ).toBeInTheDocument()
+    expect(screen.getByText("RAD-1")).toBeInTheDocument()
+    expect(screen.getByText("Build Kanban board")).toBeInTheDocument()
+    expect(screen.getByText("P1")).toBeInTheDocument()
+    expect(screen.getByText("ui")).toBeInTheDocument()
+    expect(screen.getByText("1 blocker")).toBeInTheDocument()
+  })
+
+  it("renders a focused issue detail link without a drag handle", () => {
+    render(<IssueCard issue={issue} />)
+
+    const link = screen.getByRole("link", {
+      name: "RAD-1 Build Kanban board",
+    })
+
+    expect(link).toHaveAttribute("href", "/issues/issue-1")
+    expect(within(link).queryByText("P1")).not.toBeInTheDocument()
+    expect(within(link).queryByText("ui")).not.toBeInTheDocument()
+    expect(within(link).queryByText("1 blocker")).not.toBeInTheDocument()
     expect(
-      screen.getByRole("link", { name: /Build Kanban board/ })
-    ).toHaveAttribute("href", "/issues/issue-1")
+      screen.queryByRole("button", { name: "Drag issue RAD-1" })
+    ).not.toBeInTheDocument()
   })
 })
