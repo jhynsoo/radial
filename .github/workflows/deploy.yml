@@ -61,6 +61,9 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Setup QEMU
+        uses: docker/setup-qemu-action@v3
+
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -77,6 +80,7 @@ jobs:
           context: .
           file: Dockerfile
           target: api-runner
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: |
             ${{ env.IMAGE_NAMESPACE }}/radial-api:main
@@ -88,6 +92,7 @@ jobs:
           context: .
           file: Dockerfile
           target: web-runner
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: |
             ${{ env.IMAGE_NAMESPACE }}/radial-web:main
@@ -99,6 +104,7 @@ jobs:
           context: .
           file: Dockerfile
           target: api-migrator
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: |
             ${{ env.IMAGE_NAMESPACE }}/radial-migrator:main
