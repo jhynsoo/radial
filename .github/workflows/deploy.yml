@@ -104,6 +104,30 @@ jobs:
             ${{ env.IMAGE_NAMESPACE }}/radial-migrator:main
             ${{ env.IMAGE_NAMESPACE }}/radial-migrator:${{ github.sha }}
 
+      - name: Prepare deploy directory
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          script: |
+            set -euo pipefail
+
+            mkdir -p /opt/radial
+            test -f /opt/radial/.env
+
+      - name: Upload compose file
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          source: docker-compose.yml
+          target: /opt/radial
+          overwrite: true
+
       - name: Deploy to Ubuntu server
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -116,6 +140,7 @@ jobs:
 
             cd /opt/radial
 
+            docker compose config --quiet
             echo "${{ secrets.GHCR_READ_TOKEN }}" | docker login ghcr.io -u jhynsoo --password-stdin
 
             docker compose pull radial-api radial-web radial-migrate
