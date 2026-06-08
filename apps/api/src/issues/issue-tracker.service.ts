@@ -83,6 +83,24 @@ function hasField(body: Record<string, unknown>, fieldName: string): boolean {
   return fieldName in body
 }
 
+function defaultIssueViewFilters(): IssueViewFilters {
+  return {
+    query: null,
+    states: [],
+    assignee: null,
+    labels: [],
+  }
+}
+
+function defaultIssueViewDisplayOptions(): IssueViewDisplayOptions {
+  return {
+    layout: "kanban",
+    group_by: "state",
+    sort_by: "updated_at",
+    show_empty_states: true,
+  }
+}
+
 @Injectable()
 export class IssueTrackerService {
   private readonly statesByKey = new Map<string, string>()
@@ -322,6 +340,15 @@ export class IssueTrackerService {
   async updateIssueView(viewId: string, payload: unknown): Promise<IssueView> {
     const body = asRecord(payload)
     const patch: Parameters<IssueRepository["updateIssueView"]>[1] = {}
+    const needsExistingView =
+      hasField(body, "filters") || hasField(body, "display_options")
+    const existingView = needsExistingView
+      ? await this.issueRepository.findIssueViewById(viewId)
+      : null
+
+    if (needsExistingView && !existingView) {
+      notFound("tracker_not_found", `Issue view '${viewId}' was not found.`)
+    }
 
     if (hasField(body, "name")) {
       patch.name = this.readRequiredString(
@@ -331,11 +358,23 @@ export class IssueTrackerService {
       )
     }
     if (hasField(body, "filters")) {
-      patch.filters = await this.readIssueViewFilters(body.filters)
+      if (!existingView) {
+        notFound("tracker_not_found", `Issue view '${viewId}' was not found.`)
+      }
+
+      patch.filters = await this.readIssueViewFilters(
+        body.filters,
+        existingView.filters
+      )
     }
     if (hasField(body, "display_options")) {
+      if (!existingView) {
+        notFound("tracker_not_found", `Issue view '${viewId}' was not found.`)
+      }
+
       patch.display_options = this.readIssueViewDisplayOptions(
-        body.display_options
+        body.display_options,
+        existingView.display_options
       )
     }
 
@@ -480,9 +519,9 @@ export class IssueTrackerService {
   }
 
   async updateIssue(issueId: string, payload: unknown): Promise<IssueDetail> {
-    await this.requireIssue(issueId)
+    const issue = await this.requireIssue(issueId)
     const body = asRecord(payload)
-    const patch = await this.readIssueUpdatePatch(body)
+    const patch = await this.readIssueUpdatePatch(body, issue)
 
     if (Object.keys(patch).length === 0) {
       badRequest(
@@ -578,7 +617,8 @@ export class IssueTrackerService {
   }
 
   private async readIssueUpdatePatch(
-    body: Record<string, unknown>
+    body: Record<string, unknown>,
+    issue: IssueRecord
   ): Promise<IssueUpdatePatch> {
     const patch: IssueUpdatePatch = {}
 
@@ -620,7 +660,10 @@ export class IssueTrackerService {
       patch.assignee = this.readNullableString(body.assignee)
     }
     if (hasField(body, "milestone_id")) {
-      patch.milestone_id = this.readNullableString(body.milestone_id)
+      patch.milestone_id = await this.readMilestonePatch(
+        issue.project,
+        body.milestone_id
+      )
     }
     if (hasField(body, "cycle_id")) {
       patch.cycle_id = this.readNullableString(body.cycle_id)
@@ -664,6 +707,30 @@ export class IssueTrackerService {
     }
 
     return states[0]
+  }
+
+  private async readMilestonePatch(
+    projectSlug: string,
+    value: unknown
+  ): Promise<string | null> {
+    const milestoneId = this.readNullableString(value)
+
+    if (!milestoneId) {
+      return milestoneId
+    }
+
+    const projectMilestones =
+      await this.issueRepository.listProjectMilestones(projectSlug)
+    const milestone = projectMilestones.find((item) => item.id === milestoneId)
+
+    if (!milestone) {
+      notFound(
+        "tracker_not_found",
+        `Milestone '${milestoneId}' was not found in project '${projectSlug}'.`
+      )
+    }
+
+    return milestone.id
   }
 
   async deactivateComment(commentId: string): Promise<IssueComment> {
@@ -1113,35 +1180,63 @@ export class IssueTrackerService {
   }
 
   private async readIssueViewFilters(
-    value: unknown
+    value: unknown,
+    base?: IssueViewFilters
   ): Promise<IssueViewFilters> {
     const body = value === undefined || value === null ? {} : asRecord(value)
-    const states = await Promise.all(
-      (this.readOptionalStringList(body.states) ?? []).map((state) =>
-        this.resolveExistingState(state)
-      )
-    )
+    const fallback =
+      value === null
+        ? defaultIssueViewFilters()
+        : (base ?? defaultIssueViewFilters())
+    const states = hasField(body, "states")
+      ? await Promise.all(
+          (this.readOptionalStringList(body.states) ?? []).map((state) =>
+            this.resolveExistingState(state)
+          )
+        )
+      : [...fallback.states]
 
     return {
-      query: this.readNullableString(body.query),
+      query: hasField(body, "query")
+        ? this.readNullableString(body.query)
+        : fallback.query,
       states,
-      assignee: this.readNullableString(body.assignee),
-      labels: this.readLabels(body.labels),
+      assignee: hasField(body, "assignee")
+        ? this.readNullableString(body.assignee)
+        : fallback.assignee,
+      labels: hasField(body, "labels")
+        ? this.readLabels(body.labels)
+        : [...fallback.labels],
     }
   }
 
-  private readIssueViewDisplayOptions(value: unknown): IssueViewDisplayOptions {
+  private readIssueViewDisplayOptions(
+    value: unknown,
+    base?: IssueViewDisplayOptions
+  ): IssueViewDisplayOptions {
     const body = value === undefined || value === null ? {} : asRecord(value)
+    const fallback =
+      value === null
+        ? defaultIssueViewDisplayOptions()
+        : (base ?? defaultIssueViewDisplayOptions())
 
     return {
-      layout: this.readIssueViewLayout(body.layout),
-      group_by: this.readIssueViewGroupBy(body.group_by),
-      sort_by: this.readIssueViewSortBy(body.sort_by),
-      show_empty_states: this.readBoolean(
-        body.show_empty_states,
-        "show_empty_states",
-        true
-      ),
+      layout: hasField(body, "layout")
+        ? this.readIssueViewLayout(body.layout)
+        : fallback.layout,
+      group_by: hasField(body, "group_by")
+        ? this.readIssueViewGroupBy(body.group_by)
+        : fallback.group_by,
+      sort_by: hasField(body, "sort_by")
+        ? this.readIssueViewSortBy(body.sort_by)
+        : fallback.sort_by,
+      show_empty_states: hasField(body, "show_empty_states")
+        ? this.readBoolean(
+            body.show_empty_states,
+            "show_empty_states",
+            fallback.show_empty_states
+          )
+        : fallback.show_empty_states,
     }
   }
 

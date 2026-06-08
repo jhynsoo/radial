@@ -389,6 +389,80 @@ describe("IssueTrackerService", () => {
     )
   })
 
+  it("preserves saved view settings omitted from partial updates", async () => {
+    const project = await service.createProject({
+      slug: "radial-api",
+      name: "Radial API",
+    })
+    const view = await service.createIssueView(project.slug, {
+      name: "Backend work",
+      filters: {
+        query: " API ",
+        states: ["Todo"],
+        assignee: " me ",
+        labels: ["Backend"],
+      },
+      display_options: {
+        layout: "kanban",
+        group_by: "state",
+        sort_by: "priority",
+        show_empty_states: false,
+      },
+    })
+
+    const updated = await service.updateIssueView(view.id, {
+      filters: {
+        states: ["Done"],
+      },
+      display_options: {
+        show_empty_states: true,
+      },
+    })
+
+    expect(updated.filters).toEqual({
+      query: "API",
+      states: ["Done"],
+      assignee: "me",
+      labels: ["backend"],
+    })
+    expect(updated.display_options).toEqual({
+      layout: "kanban",
+      group_by: "state",
+      sort_by: "priority",
+      show_empty_states: true,
+    })
+  })
+
+  it("rejects milestones from a different project when updating issues", async () => {
+    const project = await service.createProject({
+      slug: "radial-api",
+      name: "Radial API",
+    })
+    const otherProject = await service.createProject({
+      slug: "other-api",
+      name: "Other API",
+    })
+    const otherMilestone = await service.createProjectMilestone(
+      otherProject.slug,
+      {
+        name: "Other project milestone",
+      }
+    )
+    const issue = await service.createIssue({
+      project: project.slug,
+      title: "Schedule API work",
+    })
+
+    await expectTrackerError(
+      () =>
+        service.updateIssue(issue.id, {
+          milestone_id: otherMilestone.id,
+        }),
+      "tracker_not_found"
+    )
+    expect((await service.getIssue(issue.id)).milestone_id).toBeNull()
+  })
+
   it("resolves internal and external blockers with live internal state", async () => {
     const blocker = await service.createIssue({
       project: "radial",
