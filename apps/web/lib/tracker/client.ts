@@ -8,7 +8,9 @@ import type {
   IssueDetail,
   IssueLink,
   IssueRelation,
+  IssueTeam,
   IssueView,
+  IssueWorkflowState,
   NormalizedIssue,
   RelationType,
   SearchIssuesBody,
@@ -119,6 +121,23 @@ export async function searchIssues(
     }
   )
   return response.issues
+}
+
+export async function listTeams(): Promise<IssueTeam[]> {
+  const response = await requestTracker<{ teams: IssueTeam[] }>("/teams", {
+    method: "GET",
+  })
+  return response.teams
+}
+
+export async function listWorkflowStates(
+  teamKey: string
+): Promise<IssueWorkflowState[]> {
+  const response = await requestTracker<{ states: IssueWorkflowState[] }>(
+    `/teams/${encodeURIComponent(teamKey)}/workflow-states`,
+    { method: "GET" }
+  )
+  return response.states
 }
 
 export async function getIssue(issueId: string): Promise<IssueDetail> {

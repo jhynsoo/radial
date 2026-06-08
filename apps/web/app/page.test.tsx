@@ -4,9 +4,41 @@ import type { IssueSortKey } from "@/lib/issues/board"
 import type { NormalizedIssue } from "@/lib/tracker/types"
 import Page from "./page"
 
-const { searchIssuesMock } = vi.hoisted(() => ({
-  searchIssuesMock: vi.fn(),
-}))
+const { listTeamsMock, listWorkflowStatesMock, searchIssuesMock } = vi.hoisted(
+  () => ({
+    listTeamsMock: vi.fn(),
+    listWorkflowStatesMock: vi.fn(),
+    searchIssuesMock: vi.fn(),
+  })
+)
+
+const workflowState = {
+  id: "workflow-state-1",
+  team_key: "RAD",
+  name: "QA Review",
+  type: "started" as const,
+  position: 1,
+  created_at: "2026-05-12T00:00:00.000Z",
+  updated_at: "2026-05-12T00:00:00.000Z",
+}
+
+const team = {
+  key: "RAD",
+  name: "Radial Team",
+  description: null,
+  workflow_states: [
+    {
+      ...workflowState,
+      id: "workflow-state-0",
+      name: "Todo",
+      position: 0,
+      type: "unstarted" as const,
+    },
+    workflowState,
+  ],
+  created_at: "2026-05-12T00:00:00.000Z",
+  updated_at: "2026-05-12T00:00:00.000Z",
+}
 
 vi.mock("@/components/issues/board-toolbar", () => ({
   BoardToolbar: ({
@@ -47,9 +79,11 @@ vi.mock("@/components/issues/issue-kanban-board", async () => {
     IssueKanbanBoard: ({
       issues,
       showEmptyStates,
+      workflowStates,
     }: {
       issues: NormalizedIssue[]
       showEmptyStates?: boolean
+      workflowStates?: readonly string[]
     }) => {
       const [mountedIssues] = React.useState(issues)
 
@@ -57,6 +91,9 @@ vi.mock("@/components/issues/issue-kanban-board", async () => {
         <div data-testid="board">
           {mountedIssues.map((issue) => issue.identifier).join(",")}
           <span data-testid="show-empty">{String(showEmptyStates)}</span>
+          <span data-testid="workflow-states">
+            {(workflowStates ?? []).join(",")}
+          </span>
         </div>
       )
     },
@@ -64,6 +101,8 @@ vi.mock("@/components/issues/issue-kanban-board", async () => {
 })
 
 vi.mock("@/lib/tracker/client", () => ({
+  listTeams: listTeamsMock,
+  listWorkflowStates: listWorkflowStatesMock,
   searchIssues: searchIssuesMock,
 }))
 
@@ -102,6 +141,10 @@ const issues: NormalizedIssue[] = [
 
 describe("Page", () => {
   beforeEach(() => {
+    listTeamsMock.mockReset()
+    listTeamsMock.mockResolvedValue([])
+    listWorkflowStatesMock.mockReset()
+    listWorkflowStatesMock.mockResolvedValue([])
     searchIssuesMock.mockReset()
   })
 
@@ -126,6 +169,64 @@ describe("Page", () => {
     )
     expect(screen.getByTestId("board")).toHaveTextContent("RAD-1")
     expect(screen.getByTestId("board")).not.toHaveTextContent("RAD-2")
+  })
+
+  it("loads configured workflow states for board searches", async () => {
+    listTeamsMock.mockResolvedValueOnce([team])
+    searchIssuesMock.mockResolvedValueOnce([
+      {
+        ...issues[0],
+        state: "QA Review",
+      },
+    ])
+
+    render(
+      await Page({
+        searchParams: Promise.resolve({
+          project: "radial",
+        }),
+      })
+    )
+
+    expect(listTeamsMock).toHaveBeenCalledOnce()
+    expect(listWorkflowStatesMock).not.toHaveBeenCalled()
+    expect(searchIssuesMock).toHaveBeenCalledWith({
+      project: "radial",
+      states: ["Todo", "QA Review"],
+    })
+    expect(screen.getByTestId("workflow-states")).toHaveTextContent(
+      "Todo,QA Review"
+    )
+    expect(screen.getByTestId("board")).toHaveTextContent("RAD-1")
+  })
+
+  it("loads team-specific workflow states when the team param is present", async () => {
+    listWorkflowStatesMock.mockResolvedValueOnce(team.workflow_states)
+    searchIssuesMock.mockResolvedValueOnce([
+      {
+        ...issues[0],
+        state: "QA Review",
+      },
+    ])
+
+    render(
+      await Page({
+        searchParams: Promise.resolve({
+          project: "radial",
+          team: "RAD",
+        }),
+      })
+    )
+
+    expect(listTeamsMock).not.toHaveBeenCalled()
+    expect(listWorkflowStatesMock).toHaveBeenCalledWith("RAD")
+    expect(searchIssuesMock).toHaveBeenCalledWith({
+      project: "radial",
+      states: ["Todo", "QA Review"],
+    })
+    expect(screen.getByTestId("workflow-states")).toHaveTextContent(
+      "Todo,QA Review"
+    )
   })
 
   it("renders the toolbar and error panel when loading issues fails", async () => {

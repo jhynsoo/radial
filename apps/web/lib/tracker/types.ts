@@ -20,6 +20,12 @@ export type ErrorCategory =
   | "tracker_relation_create_failed"
 
 export type RelationType = "related" | "blocked_by"
+export type WorkflowStateType =
+  | "backlog"
+  | "unstarted"
+  | "started"
+  | "completed"
+  | "canceled"
 export type IssueViewLayout = "kanban" | "list"
 export type IssueViewGroupBy = "state" | "assignee" | "priority"
 export type IssueViewSortBy =
@@ -105,6 +111,25 @@ export interface IssueView {
   name: string
   filters: IssueViewFilters
   display_options: IssueViewDisplayOptions
+  created_at: string
+  updated_at: string
+}
+
+export interface IssueWorkflowState {
+  id: string
+  team_key: string
+  name: string
+  type: WorkflowStateType
+  position: number
+  created_at: string
+  updated_at: string
+}
+
+export interface IssueTeam {
+  key: string
+  name: string
+  description: string | null
+  workflow_states: IssueWorkflowState[]
   created_at: string
   updated_at: string
 }

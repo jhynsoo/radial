@@ -45,6 +45,23 @@ describe("board model", () => {
     expect(grouped.Rework).toEqual([])
   })
 
+  it("groups issues into configured workflow columns", () => {
+    const grouped = groupIssuesByState(
+      [
+        issue({ id: "issue-1", state: "Todo" }),
+        issue({ id: "issue-2", state: "QA Review" }),
+      ],
+      ["Todo", "QA Review", "Done"]
+    )
+
+    expect(Object.keys(grouped)).toEqual(["Todo", "QA Review", "Done"])
+    expect(grouped.Todo!.map((candidate) => candidate.id)).toEqual(["issue-1"])
+    expect(grouped["QA Review"]!.map((candidate) => candidate.id)).toEqual([
+      "issue-2",
+    ])
+    expect(grouped.Done).toEqual([])
+  })
+
   it("filters by title, identifier, and labels", () => {
     const issues = [
       issue({ identifier: "RAD-1", title: "API console", labels: ["api"] }),
@@ -121,6 +138,34 @@ describe("board model", () => {
     expect(findIssueColumn(grouped, "missing")).toBeNull()
   })
 
+  it("finds and updates issues with configured workflow columns", () => {
+    const workflowStates = ["Todo", "QA Review", "Done"]
+    const grouped = groupIssuesByState(
+      [
+        issue({ id: "issue-1", state: "Todo" }),
+        issue({ id: "issue-2", state: "QA Review" }),
+      ],
+      workflowStates
+    )
+
+    expect(findIssueColumn(grouped, "issue-2", workflowStates)).toBe(
+      "QA Review"
+    )
+
+    const updated = updateIssueStateInColumns(
+      grouped,
+      "issue-1",
+      "QA Review",
+      workflowStates
+    )
+
+    expect(updated.Todo).toEqual([])
+    expect(updated["QA Review"]!.map((candidate) => candidate.id)).toEqual([
+      "issue-2",
+      "issue-1",
+    ])
+  })
+
   it("updates the moved issue state inside grouped columns", () => {
     const grouped = groupIssuesByState([
       issue({ id: "issue-1", state: "Todo" }),
@@ -131,15 +176,15 @@ describe("board model", () => {
     const updated = updateIssueStateInColumns(grouped, "issue-1", "In Progress")
 
     expect(updated.Todo).toHaveLength(0)
-    expect(updated["In Progress"].map((candidate) => candidate.id)).toEqual([
+    expect(updated["In Progress"]!.map((candidate) => candidate.id)).toEqual([
       "issue-2",
       "issue-1",
     ])
-    expect(updated["In Progress"][1]).toMatchObject({
+    expect(updated["In Progress"]![1]).toMatchObject({
       id: "issue-1",
       state: "In Progress",
     })
-    expect(grouped.Todo[0]?.state).toBe("Todo")
+    expect(grouped.Todo![0]?.state).toBe("Todo")
   })
 
   it("restores canonical order from the source issue list", () => {
@@ -154,7 +199,7 @@ describe("board model", () => {
 
     const restored = restoreCanonicalColumnOrder(reordered, sourceIssues)
 
-    expect(restored.Todo.map((candidate) => candidate.id)).toEqual([
+    expect(restored.Todo!.map((candidate) => candidate.id)).toEqual([
       "issue-1",
       "issue-2",
     ])

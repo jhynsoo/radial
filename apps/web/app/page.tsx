@@ -1,7 +1,11 @@
 import { BoardToolbar } from "@/components/issues/board-toolbar"
 import { IssueKanbanBoard } from "@/components/issues/issue-kanban-board"
-import { filterIssues, type IssueSortKey } from "@/lib/issues/board"
-import { searchIssues } from "@/lib/tracker/client"
+import {
+  filterIssues,
+  normalizeWorkflowStates,
+  type IssueSortKey,
+} from "@/lib/issues/board"
+import { listTeams, listWorkflowStates, searchIssues } from "@/lib/tracker/client"
 import { WORKFLOW_STATES } from "@/lib/tracker/constants"
 import type { NormalizedIssue } from "@/lib/tracker/types"
 
@@ -10,6 +14,7 @@ type SearchParamValue = string | string[] | undefined
 type PageProps = {
   searchParams?: Promise<{
     project?: SearchParamValue
+    team?: SearchParamValue
     q?: SearchParamValue
     assignee?: SearchParamValue
     label?: SearchParamValue
@@ -39,6 +44,7 @@ function loadErrorMessage(error: unknown): string {
 
 function boardKey(
   project: string,
+  workflowStates: readonly string[],
   query: string,
   assignee: string,
   label: string,
@@ -48,6 +54,7 @@ function boardKey(
 ): string {
   return [
     project,
+    workflowStates.join(","),
     query,
     assignee,
     label,
@@ -76,9 +83,24 @@ function parseShowEmptyStates(value: string): boolean {
   return value !== "false"
 }
 
+async function loadWorkflowStates(teamKey: string): Promise<string[]> {
+  try {
+    const states = teamKey
+      ? (await listWorkflowStates(teamKey)).map((state) => state.name)
+      : (await listTeams()).flatMap((team) =>
+          team.workflow_states.map((state) => state.name)
+        )
+
+    return normalizeWorkflowStates(states)
+  } catch {
+    return [...WORKFLOW_STATES]
+  }
+}
+
 export default async function Page({ searchParams }: PageProps) {
   const params = await searchParams
   const project = firstSearchParam(params?.project)
+  const team = firstSearchParam(params?.team)
   const query = firstSearchParam(params?.q)
   const assignee = firstSearchParam(params?.assignee)
   const label = firstSearchParam(params?.label)
@@ -87,14 +109,16 @@ export default async function Page({ searchParams }: PageProps) {
     firstSearchParam(params?.show_empty)
   )
   let issues: NormalizedIssue[] = []
+  let workflowStates: string[] = [...WORKFLOW_STATES]
   let loadError: string | null = null
 
   if (project) {
     try {
+      workflowStates = await loadWorkflowStates(team)
       issues = filterIssues(
         await searchIssues({
           project,
-          states: WORKFLOW_STATES,
+          states: workflowStates,
           ...(assignee ? { assignee } : {}),
         }),
         {
@@ -131,6 +155,7 @@ export default async function Page({ searchParams }: PageProps) {
             issues={issues}
             key={boardKey(
               project,
+              workflowStates,
               query,
               assignee,
               label,
@@ -139,6 +164,7 @@ export default async function Page({ searchParams }: PageProps) {
               issues
             )}
             showEmptyStates={showEmptyStates}
+            workflowStates={workflowStates}
           />
         ) : (
           <div className="flex min-h-[calc(100svh-9rem)] items-center justify-center rounded-md border border-dashed border-border bg-background px-4 py-10 text-sm text-muted-foreground">

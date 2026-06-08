@@ -15,6 +15,8 @@ import {
   getIssue,
   listComments,
   listIssueViews,
+  listTeams,
+  listWorkflowStates,
   listLinks,
   searchIssues,
   updateComment,
@@ -68,6 +70,23 @@ const currentUser = {
   id: "user-1",
   name: "Radial User",
   email: "user@example.com",
+}
+const workflowState = {
+  id: "workflow-state-1",
+  team_key: "RAD",
+  name: "QA Review",
+  type: "started" as const,
+  position: 1,
+  created_at: "2026-05-12T00:00:00.000Z",
+  updated_at: "2026-05-12T00:00:00.000Z",
+}
+const team = {
+  key: "RAD",
+  name: "Radial Team",
+  description: null,
+  workflow_states: [workflowState],
+  created_at: "2026-05-12T00:00:00.000Z",
+  updated_at: "2026-05-12T00:00:00.000Z",
 }
 const issueView = {
   id: "issue-view-1",
@@ -435,6 +454,34 @@ describe("tracker client", () => {
       4,
       "http://tracker.test/api/v1/views/issue-view%2F1",
       expect.objectContaining({ method: "DELETE" })
+    )
+  })
+
+  it("lists teams and workflow states", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ teams: [team] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ states: [workflowState] }),
+      })
+    vi.stubGlobal("fetch", fetchMock)
+
+    await expect(listTeams()).resolves.toEqual([team])
+    await expect(listWorkflowStates("RAD")).resolves.toEqual([workflowState])
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "http://tracker.test/api/v1/teams",
+      expect.objectContaining({ method: "GET" })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "http://tracker.test/api/v1/teams/RAD/workflow-states",
+      expect.objectContaining({ method: "GET" })
     )
   })
 

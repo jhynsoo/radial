@@ -15,16 +15,18 @@ import { IssueCard } from "@/components/issues/issue-card"
 import {
   findIssueColumn,
   groupIssuesByState,
+  normalizeWorkflowStates,
   restoreCanonicalColumnOrder,
   updateIssueStateInColumns,
   type IssuesByState,
 } from "@/lib/issues/board"
-import { WORKFLOW_STATES, type WorkflowState } from "@/lib/tracker/constants"
+import { WORKFLOW_STATES } from "@/lib/tracker/constants"
 import type { NormalizedIssue } from "@/lib/tracker/types"
 
 type IssueKanbanBoardProps = {
   issues: NormalizedIssue[]
   showEmptyStates?: boolean
+  workflowStates?: readonly string[]
 }
 
 function cloneIssue(issue: NormalizedIssue): NormalizedIssue {
@@ -35,27 +37,36 @@ function cloneIssue(issue: NormalizedIssue): NormalizedIssue {
   }
 }
 
-function cloneColumns(columns: IssuesByState): IssuesByState {
+function cloneColumns(
+  columns: IssuesByState,
+  workflowStates: readonly string[]
+): IssuesByState {
   return Object.fromEntries(
-    WORKFLOW_STATES.map((state) => [
+    workflowStates.map((state) => [
       state,
-      columns[state].map((issue) => cloneIssue(issue)),
+      (columns[state] ?? []).map((issue) => cloneIssue(issue)),
     ])
-  ) as IssuesByState
+  )
 }
 
 function normalizeColumns(
-  columns: Partial<Record<WorkflowState, NormalizedIssue[]>>
+  columns: Partial<Record<string, NormalizedIssue[]>>,
+  workflowStates: readonly string[]
 ): IssuesByState {
   return Object.fromEntries(
-    WORKFLOW_STATES.map((state) => [state, columns[state] ?? []])
-  ) as IssuesByState
+    workflowStates.map((state) => [state, columns[state] ?? []])
+  )
 }
 
-function findIssueSnapshot(columns: IssuesByState, issueId: string) {
-  for (const state of WORKFLOW_STATES) {
-    const index = columns[state].findIndex((issue) => issue.id === issueId)
-    const issue = columns[state][index]
+function findIssueSnapshot(
+  columns: IssuesByState,
+  issueId: string,
+  workflowStates: readonly string[]
+) {
+  for (const state of workflowStates) {
+    const column = columns[state] ?? []
+    const index = column.findIndex((issue) => issue.id === issueId)
+    const issue = column[index]
 
     if (issue) {
       return { index, issue, state }
@@ -68,24 +79,31 @@ function findIssueSnapshot(columns: IssuesByState, issueId: string) {
 function restoreIssueFromSnapshot(
   currentColumns: IssuesByState,
   previousColumns: IssuesByState,
-  issueId: string
+  issueId: string,
+  workflowStates: readonly string[]
 ): IssuesByState {
-  const snapshot = findIssueSnapshot(previousColumns, issueId)
+  const snapshot = findIssueSnapshot(previousColumns, issueId, workflowStates)
   const restoredColumns = Object.fromEntries(
-    WORKFLOW_STATES.map((state) => [
+    workflowStates.map((state) => [
       state,
-      currentColumns[state]
+      (currentColumns[state] ?? [])
         .filter((issue) => issue.id !== issueId)
         .map((issue) => cloneIssue(issue)),
     ])
-  ) as IssuesByState
+  )
 
   if (!snapshot) {
     return restoredColumns
   }
 
-  restoredColumns[snapshot.state].splice(
-    Math.min(snapshot.index, restoredColumns[snapshot.state].length),
+  const restoredColumn = restoredColumns[snapshot.state]
+
+  if (!restoredColumn) {
+    return restoredColumns
+  }
+
+  restoredColumn.splice(
+    Math.min(snapshot.index, restoredColumn.length),
     0,
     cloneIssue(snapshot.issue)
   )
@@ -96,9 +114,14 @@ function restoreIssueFromSnapshot(
 function IssueKanbanBoard({
   issues,
   showEmptyStates = true,
+  workflowStates = WORKFLOW_STATES,
 }: IssueKanbanBoardProps) {
+  const workflowStateNames = React.useMemo(
+    () => normalizeWorkflowStates(workflowStates),
+    [workflowStates]
+  )
   const [columns, setColumns] = React.useState<IssuesByState>(() =>
-    groupIssuesByState(issues)
+    groupIssuesByState(issues, workflowStateNames)
   )
   const [error, setError] = React.useState<string | null>(null)
   const [, startTransition] = React.useTransition()
@@ -114,24 +137,27 @@ function IssueKanbanBoard({
   React.useEffect(() => {
     previousColumnsRef.current = null
     mutationTokensRef.current.clear()
-    updateColumns(groupIssuesByState(issues))
-  }, [issues, updateColumns])
+    updateColumns(groupIssuesByState(issues, workflowStateNames))
+  }, [issues, updateColumns, workflowStateNames])
 
   const handleValueChange = React.useCallback<
     NonNullable<KanbanProps<NormalizedIssue>["onValueChange"]>
   >(
     (nextColumns) => {
-      updateColumns(normalizeColumns(nextColumns))
+      updateColumns(normalizeColumns(nextColumns, workflowStateNames))
     },
-    [updateColumns]
+    [updateColumns, workflowStateNames]
   )
 
   const handleDragStart = React.useCallback<
     NonNullable<KanbanProps<NormalizedIssue>["onDragStart"]>
   >(() => {
-    previousColumnsRef.current = cloneColumns(latestColumnsRef.current)
+    previousColumnsRef.current = cloneColumns(
+      latestColumnsRef.current,
+      workflowStateNames
+    )
     setError(null)
-  }, [])
+  }, [workflowStateNames])
 
   const handleDragCancel = React.useCallback<
     NonNullable<KanbanProps<NormalizedIssue>["onDragCancel"]>
@@ -153,8 +179,16 @@ function IssueKanbanBoard({
 
       queueMicrotask(() => {
         const nextColumns = latestColumnsRef.current
-        const previousState = findIssueColumn(previousColumns, issueId)
-        const nextState = findIssueColumn(nextColumns, issueId)
+        const previousState = findIssueColumn(
+          previousColumns,
+          issueId,
+          workflowStateNames
+        )
+        const nextState = findIssueColumn(
+          nextColumns,
+          issueId,
+          workflowStateNames
+        )
 
         if (!previousState || !nextState) {
           updateColumns(previousColumns)
@@ -162,12 +196,23 @@ function IssueKanbanBoard({
         }
 
         if (previousState === nextState) {
-          updateColumns(restoreCanonicalColumnOrder(nextColumns, issues))
+          updateColumns(
+            restoreCanonicalColumnOrder(
+              nextColumns,
+              issues,
+              workflowStateNames
+            )
+          )
           return
         }
 
         updateColumns(
-          updateIssueStateInColumns(nextColumns, issueId, nextState)
+          updateIssueStateInColumns(
+            nextColumns,
+            issueId,
+            nextState,
+            workflowStateNames
+          )
         )
         setError(null)
 
@@ -189,7 +234,11 @@ function IssueKanbanBoard({
 
             mutationTokensRef.current.delete(issueId)
             setColumns((currentColumns) => {
-              const currentState = findIssueColumn(currentColumns, issueId)
+              const currentState = findIssueColumn(
+                currentColumns,
+                issueId,
+                workflowStateNames
+              )
 
               if (currentState !== nextState) {
                 latestColumnsRef.current = currentColumns
@@ -199,7 +248,8 @@ function IssueKanbanBoard({
               const restoredColumns = restoreIssueFromSnapshot(
                 currentColumns,
                 previousColumns,
-                issueId
+                issueId,
+                workflowStateNames
               )
               latestColumnsRef.current = restoredColumns
               return restoredColumns
@@ -209,12 +259,12 @@ function IssueKanbanBoard({
         })
       })
     },
-    [issues, startTransition, updateColumns]
+    [issues, startTransition, updateColumns, workflowStateNames]
   )
 
   const visibleStates = showEmptyStates
-    ? WORKFLOW_STATES
-    : WORKFLOW_STATES.filter((state) => columns[state].length > 0)
+    ? workflowStateNames
+    : workflowStateNames.filter((state) => (columns[state] ?? []).length > 0)
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
@@ -253,12 +303,12 @@ function IssueKanbanBoard({
               <header className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
                 <h2 className="truncate text-sm font-medium">{state}</h2>
                 <span className="rounded-md border border-border bg-background px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
-                  {columns[state].length}
+                  {(columns[state] ?? []).length}
                 </span>
               </header>
               <div className="flex min-h-32 flex-1 flex-col gap-2 p-2">
-                {columns[state].length > 0 ? (
-                  columns[state].map((issue) => (
+                {(columns[state] ?? []).length > 0 ? (
+                  (columns[state] ?? []).map((issue) => (
                     <KanbanItem
                       aria-label={`Drag issue ${issue.identifier}`}
                       asHandle

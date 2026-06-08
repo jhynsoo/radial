@@ -19,11 +19,10 @@ import {
   updateIssue,
   updateIssueState,
 } from "@/lib/tracker/client"
-import type { WorkflowState } from "@/lib/tracker/constants"
 
 export async function updateIssueStateAction(
   issueId: string,
-  state: WorkflowState,
+  state: string
 ) {
   await updateIssueState(issueId, state)
   revalidatePath("/")
