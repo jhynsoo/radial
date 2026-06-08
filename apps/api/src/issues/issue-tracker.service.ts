@@ -128,7 +128,13 @@ export class IssueTrackerService {
   }
 
   async listTeams(): Promise<IssueTeam[]> {
-    return this.issueRepository.listTeams()
+    const teams = await this.issueRepository.listTeams()
+
+    for (const team of teams) {
+      this.registerWorkflowStates(team.workflow_states)
+    }
+
+    return teams
   }
 
   async createTeam(payload: unknown): Promise<IssueTeam> {
@@ -300,7 +306,7 @@ export class IssueTrackerService {
         "name",
         "tracker_unknown_payload"
       ),
-      filters: this.readIssueViewFilters(body.filters),
+      filters: await this.readIssueViewFilters(body.filters),
       display_options: this.readIssueViewDisplayOptions(body.display_options),
       created_at: createdAt,
       updated_at: createdAt,
@@ -325,7 +331,7 @@ export class IssueTrackerService {
       )
     }
     if (hasField(body, "filters")) {
-      patch.filters = this.readIssueViewFilters(body.filters)
+      patch.filters = await this.readIssueViewFilters(body.filters)
     }
     if (hasField(body, "display_options")) {
       patch.display_options = this.readIssueViewDisplayOptions(
@@ -376,6 +382,8 @@ export class IssueTrackerService {
     if (!team) {
       notFound("tracker_not_found", `Team '${key}' was not found.`)
     }
+
+    this.registerWorkflowStates(team.workflow_states)
 
     return team.workflow_states
   }
@@ -588,7 +596,7 @@ export class IssueTrackerService {
       patch.priority = this.readPriority(body.priority)
     }
     if (hasField(body, "state_name") || hasField(body, "state")) {
-      patch.state = this.readStatePatch(body)
+      patch.state = await this.readStatePatch(body)
     }
     if (hasField(body, "branch_name")) {
       patch.branch_name = this.readNullableString(body.branch_name)
@@ -621,12 +629,12 @@ export class IssueTrackerService {
     return patch
   }
 
-  private readStatePatch(body: Record<string, unknown>): string {
+  private async readStatePatch(body: Record<string, unknown>): Promise<string> {
     const states: string[] = []
 
     if (hasField(body, "state_name")) {
       states.push(
-        this.resolveExistingState(
+        await this.resolveExistingState(
           this.readRequiredString(
             body.state_name,
             "state_name",
@@ -637,7 +645,7 @@ export class IssueTrackerService {
     }
     if (hasField(body, "state")) {
       states.push(
-        this.resolveExistingState(
+        await this.resolveExistingState(
           this.readRequiredString(
             body.state,
             "state",
@@ -1104,10 +1112,14 @@ export class IssueTrackerService {
     )
   }
 
-  private readIssueViewFilters(value: unknown): IssueViewFilters {
+  private async readIssueViewFilters(
+    value: unknown
+  ): Promise<IssueViewFilters> {
     const body = value === undefined || value === null ? {} : asRecord(value)
-    const states = (this.readOptionalStringList(body.states) ?? []).map(
-      (state) => this.resolveExistingState(state)
+    const states = await Promise.all(
+      (this.readOptionalStringList(body.states) ?? []).map((state) =>
+        this.resolveExistingState(state)
+      )
     )
 
     return {
@@ -1299,14 +1311,27 @@ export class IssueTrackerService {
     return trimmed
   }
 
-  private resolveExistingState(state: string): string {
-    const existing = this.statesByKey.get(stateKey(state))
+  private async resolveExistingState(state: string): Promise<string> {
+    let existing = this.statesByKey.get(stateKey(state))
+
+    if (!existing) {
+      await this.reloadPersistedWorkflowStates()
+      existing = this.statesByKey.get(stateKey(state))
+    }
 
     if (!existing) {
       badRequest("tracker_state_not_found", `State '${state}' was not found.`)
     }
 
     return existing
+  }
+
+  private async reloadPersistedWorkflowStates(): Promise<void> {
+    const teams = await this.issueRepository.listTeams()
+
+    for (const team of teams) {
+      this.registerWorkflowStates(team.workflow_states)
+    }
   }
 
   private publicBaseUrl(): string {

@@ -199,6 +199,56 @@ describe("IssueTrackerService", () => {
     ).toBe("QA Review")
   })
 
+  it("loads persisted workflow states before validating state references", async () => {
+    const repository = new InMemoryIssueRepository()
+    const setupService = new IssueTrackerService(repository)
+
+    await setupService.createTeam({
+      key: "RAD",
+      name: "Radial Team",
+    })
+    await setupService.replaceWorkflowStates("RAD", {
+      states: [
+        { name: "Todo", type: "unstarted" },
+        { name: "QA Review", type: "started" },
+        { name: "Done", type: "completed" },
+      ],
+    })
+    const project = await setupService.createProject({
+      slug: "radial-api",
+      name: "Radial API",
+    })
+    const issue = await setupService.createIssue({
+      project: project.slug,
+      title: "Needs persisted QA",
+      state_name: "Todo",
+    })
+
+    const issueServiceAfterRestart = new IssueTrackerService(repository)
+    expect(
+      (await issueServiceAfterRestart.listWorkflowStates("RAD")).map(
+        (state) => state.name
+      )
+    ).toEqual(["Todo", "QA Review", "Done"])
+    expect(
+      (
+        await issueServiceAfterRestart.updateIssue(issue.id, {
+          state: "QA Review",
+        })
+      ).state
+    ).toBe("QA Review")
+
+    const viewServiceAfterRestart = new IssueTrackerService(repository)
+    const view = await viewServiceAfterRestart.createIssueView(project.slug, {
+      name: "QA board",
+      filters: {
+        states: ["QA Review"],
+      },
+    })
+
+    expect(view.filters.states).toEqual(["QA Review"])
+  })
+
   it("creates projects, milestones, cycles, and links them to issues", async () => {
     await service.createTeam({
       key: "RAD",
