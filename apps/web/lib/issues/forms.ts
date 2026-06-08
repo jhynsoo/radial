@@ -1,4 +1,8 @@
-import type { CreateIssueBody, RelationType } from "../tracker/types"
+import type {
+  CreateIssueBody,
+  RelationType,
+  UpdateIssueBody,
+} from "../tracker/types"
 
 function text(formData: FormData, key: string): string {
   const value = formData.get(key)
@@ -90,6 +94,24 @@ export function parseIssueForm(formData: FormData): CreateIssueBody {
   }
 
   return body
+}
+
+export function parseIssueUpdateForm(formData: FormData): UpdateIssueBody {
+  const labels = commaList(text(formData, "labels"))
+  const blockedBy = commaList(text(formData, "blocked_by"))
+  const url = optionalText(formData, "url")
+
+  return {
+    title: required(formData, "title", "Title"),
+    description: text(formData, "description") || null,
+    state: required(formData, "state", "State"),
+    priority: parsePriority(text(formData, "priority")),
+    labels,
+    blocked_by: blockedBy,
+    assignee: text(formData, "assignee") || null,
+    branch_name: text(formData, "branch_name") || null,
+    url: url ? validateUrl(url) : null,
+  }
 }
 
 export function parseCommentBody(formData: FormData): string {

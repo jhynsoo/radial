@@ -57,6 +57,52 @@ describe("board model", () => {
     expect(filterIssues(issues, "")).toHaveLength(2)
   })
 
+  it("filters by assignee and label before applying display sort", () => {
+    const issues = [
+      issue({
+        id: "issue-1",
+        identifier: "RAD-1",
+        title: "API console",
+        assignee: "me",
+        labels: ["api"],
+        priority: 3,
+        updated_at: "2026-06-01T00:00:00.000Z",
+      }),
+      issue({
+        id: "issue-2",
+        identifier: "RAD-2",
+        title: "API worker",
+        assignee: "me",
+        labels: ["backend"],
+        priority: 1,
+        updated_at: "2026-06-03T00:00:00.000Z",
+      }),
+      issue({
+        id: "issue-3",
+        identifier: "RAD-3",
+        title: "UI polish",
+        assignee: null,
+        labels: ["api"],
+        priority: 2,
+        updated_at: "2026-06-02T00:00:00.000Z",
+      }),
+    ]
+
+    expect(
+      filterIssues(issues, {
+        query: "api",
+        assignee: "me",
+        sort: "priority",
+      }).map((candidate) => candidate.id)
+    ).toEqual(["issue-2", "issue-1"])
+    expect(
+      filterIssues(issues, {
+        label: "API",
+        sort: "updated_at",
+      }).map((candidate) => candidate.id)
+    ).toEqual(["issue-3", "issue-1"])
+  })
+
   it("moves one issue to a new state without mutating the original list", () => {
     const issues = [issue({ id: "issue-1", state: "Todo" })]
     const moved = moveIssueState(issues, "issue-1", "In Progress")

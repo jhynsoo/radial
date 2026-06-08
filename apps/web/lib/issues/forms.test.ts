@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   parseCommentBody,
   parseIssueForm,
+  parseIssueUpdateForm,
   parseLinkForm,
   parseRelationForm,
 } from "./forms"
@@ -88,6 +89,31 @@ describe("issue form parsing", () => {
       title: "Create board",
       state: "Todo",
       priority: null,
+    })
+  })
+
+  it("parses an issue update form with explicit clears", () => {
+    const formData = new FormData()
+    formData.set("title", " Updated title ")
+    formData.set("description", " ")
+    formData.set("state", "In Progress")
+    formData.set("priority", "")
+    formData.set("labels", " web, api ")
+    formData.set("blocked_by", " ")
+    formData.set("assignee", " ")
+    formData.set("branch_name", " ")
+    formData.set("url", " ")
+
+    expect(parseIssueUpdateForm(formData)).toEqual({
+      title: "Updated title",
+      description: null,
+      state: "In Progress",
+      priority: null,
+      labels: ["web", "api"],
+      blocked_by: [],
+      assignee: null,
+      branch_name: null,
+      url: null,
     })
   })
 

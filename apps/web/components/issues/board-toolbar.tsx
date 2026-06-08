@@ -1,14 +1,19 @@
 import Link from "next/link"
-import { KanbanSquare, Plus, Search } from "lucide-react"
+import { KanbanSquare, Plus, Search, SlidersHorizontal } from "lucide-react"
 
 import { ProjectScopePicker } from "@/components/issues/project-scope-picker"
+import type { IssueSortKey } from "@/lib/issues/board"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { cn } from "@workspace/ui/lib/utils"
 
 type BoardToolbarProps = {
+  assignee: string
   issueCount: number
+  label: string
   project: string
   query: string
+  showEmptyStates: boolean
+  sort?: IssueSortKey
 }
 
 function newIssueHref(project: string) {
@@ -25,8 +30,18 @@ function formatIssueCount(issueCount: number) {
   return `${issueCount} ${issueCount === 1 ? "issue" : "issues"}`
 }
 
-function BoardToolbar({ issueCount, project, query }: BoardToolbarProps) {
+function BoardToolbar({
+  assignee,
+  issueCount,
+  label,
+  project,
+  query,
+  showEmptyStates,
+  sort,
+}: BoardToolbarProps) {
   const trimmedProject = project.trim()
+  const hasFilters = Boolean(query || assignee || label)
+  const hasDisplayOptions = Boolean(sort || !showEmptyStates)
 
   return (
     <header className="shrink-0 border-b border-border bg-background/95">
@@ -47,9 +62,14 @@ function BoardToolbar({ issueCount, project, query }: BoardToolbarProps) {
             <span className="rounded-md border border-border bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
               {formatIssueCount(issueCount)}
             </span>
-            {query ? (
+            {hasFilters ? (
               <span className="rounded-md border border-border bg-background px-2 py-1 text-xs font-medium text-muted-foreground">
                 Filtered
+              </span>
+            ) : null}
+            {hasDisplayOptions ? (
+              <span className="rounded-md border border-border bg-background px-2 py-1 text-xs font-medium text-muted-foreground">
+                Display
               </span>
             ) : null}
           </div>
@@ -58,28 +78,83 @@ function BoardToolbar({ issueCount, project, query }: BoardToolbarProps) {
             currentProject={project}
           />
         </div>
-        <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-end lg:w-auto">
-          <form className="flex min-w-0 flex-1 flex-col gap-1.5" method="get">
-            <label className="text-sm font-medium" htmlFor="issue-search">
-              Search
-            </label>
-            <div className="flex min-w-0 gap-2">
+        <div className="flex w-full flex-col gap-2 lg:w-auto">
+          <form className="flex min-w-0 flex-1 flex-col gap-2" method="get">
+            <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-[minmax(10rem,1fr)_minmax(8rem,0.7fr)_minmax(8rem,0.7fr)_9rem_auto] sm:items-end">
               <input type="hidden" name="project" value={project} />
-              <input
-                className="h-8 min-w-0 flex-1 rounded-lg border border-input bg-background px-2.5 text-sm transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 sm:w-72"
-                id="issue-search"
-                name="q"
-                defaultValue={query}
-                placeholder="Identifier, title, label"
-              />
+              <div className="flex min-w-0 flex-col gap-1.5">
+                <label className="text-sm font-medium" htmlFor="issue-search">
+                  Search
+                </label>
+                <input
+                  className="h-8 min-w-0 rounded-lg border border-input bg-background px-2.5 text-sm transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                  id="issue-search"
+                  name="q"
+                  defaultValue={query}
+                  placeholder="Identifier, title, label"
+                />
+              </div>
+              <div className="flex min-w-0 flex-col gap-1.5">
+                <label className="text-sm font-medium" htmlFor="issue-assignee">
+                  Assignee
+                </label>
+                <input
+                  className="h-8 min-w-0 rounded-lg border border-input bg-background px-2.5 text-sm transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                  id="issue-assignee"
+                  name="assignee"
+                  defaultValue={assignee}
+                  placeholder="me"
+                />
+              </div>
+              <div className="flex min-w-0 flex-col gap-1.5">
+                <label className="text-sm font-medium" htmlFor="issue-label">
+                  Label
+                </label>
+                <input
+                  className="h-8 min-w-0 rounded-lg border border-input bg-background px-2.5 text-sm transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                  id="issue-label"
+                  name="label"
+                  defaultValue={label}
+                  placeholder="backend"
+                />
+              </div>
+              <div className="flex min-w-0 flex-col gap-1.5">
+                <label className="text-sm font-medium" htmlFor="issue-sort">
+                  Sort
+                </label>
+                <select
+                  className="h-8 min-w-0 rounded-lg border border-input bg-background px-2.5 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                  defaultValue={sort ?? ""}
+                  id="issue-sort"
+                  name="sort"
+                >
+                  <option value="">Default</option>
+                  <option value="updated_at">Updated</option>
+                  <option value="created_at">Created</option>
+                  <option value="priority">Priority</option>
+                  <option value="identifier">Identifier</option>
+                </select>
+              </div>
               <Button type="submit" variant="outline">
                 <Search data-icon="inline-start" />
                 Search
               </Button>
             </div>
+            <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+              <input
+                className="size-4 rounded border-input"
+                defaultChecked={showEmptyStates}
+                name="show_empty"
+                type="checkbox"
+                value="true"
+              />
+              <SlidersHorizontal aria-hidden="true" className="size-4" />
+              Show empty states
+            </label>
+            <input name="show_empty" type="hidden" value="false" />
           </form>
           <Link
-            className={cn(buttonVariants(), "self-start sm:self-end")}
+            className={cn(buttonVariants(), "self-start")}
             href={newIssueHref(project)}
           >
             <Plus data-icon="inline-start" />

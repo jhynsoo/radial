@@ -7,15 +7,19 @@ import {
   attachLink,
   createComment,
   createIssue,
+  createIssueView,
   createRelation,
   deactivateComment,
+  deleteIssueView,
   getCurrentUser,
   getIssue,
   listComments,
+  listIssueViews,
   listLinks,
   searchIssues,
   updateComment,
   updateIssueState,
+  updateIssueView,
 } from "./client"
 
 const originalEnv = process.env
@@ -65,6 +69,25 @@ const currentUser = {
   name: "Radial User",
   email: "user@example.com",
 }
+const issueView = {
+  id: "issue-view-1",
+  project_slug: "radial-api",
+  name: "My work",
+  filters: {
+    query: "API",
+    states: ["Todo"],
+    assignee: "me",
+    labels: ["backend"],
+  },
+  display_options: {
+    layout: "kanban" as const,
+    group_by: "state" as const,
+    sort_by: "priority" as const,
+    show_empty_states: false,
+  },
+  created_at: "2026-05-12T00:00:00.000Z",
+  updated_at: "2026-05-12T00:00:00.000Z",
+}
 
 beforeEach(() => {
   vi.restoreAllMocks()
@@ -91,7 +114,7 @@ describe("tracker client", () => {
       searchIssues({
         project: "radial",
         states: ["Todo"],
-      }),
+      })
     ).resolves.toEqual([])
 
     expect(fetchMock).toHaveBeenCalledWith(
@@ -104,7 +127,7 @@ describe("tracker client", () => {
         },
         body: JSON.stringify({ project: "radial", states: ["Todo"] }),
         cache: "no-store",
-      }),
+      })
     )
   })
 
@@ -120,7 +143,7 @@ describe("tracker client", () => {
             message: "Issue missing.",
           },
         }),
-      }),
+      })
     )
 
     await expect(getIssue("issue-1")).rejects.toMatchObject({
@@ -152,7 +175,7 @@ describe("tracker client", () => {
         json: async () => {
           throw new SyntaxError("Unexpected end of JSON input")
         },
-      }),
+      })
     )
 
     await expect(getIssue("issue-1")).rejects.toMatchObject({
@@ -179,7 +202,7 @@ describe("tracker client", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify(body),
-      }),
+      })
     )
   })
 
@@ -191,14 +214,14 @@ describe("tracker client", () => {
     vi.stubGlobal("fetch", fetchMock)
 
     await expect(updateIssueState("issue/1", "In Progress")).resolves.toEqual(
-      issue,
+      issue
     )
     expect(fetchMock).toHaveBeenCalledWith(
       "http://tracker.test/api/v1/issues/issue%2F1",
       expect.objectContaining({
         method: "PATCH",
         body: JSON.stringify({ state: "In Progress" }),
-      }),
+      })
     )
   })
 
@@ -214,7 +237,7 @@ describe("tracker client", () => {
       "http://tracker.test/api/v1/issues/issue%2F1/comments",
       expect.objectContaining({
         method: "GET",
-      }),
+      })
     )
   })
 
@@ -230,7 +253,7 @@ describe("tracker client", () => {
       "http://tracker.test/api/v1/issues/issue%2F1/comments?include_resolved=true",
       expect.objectContaining({
         method: "GET",
-      }),
+      })
     )
   })
 
@@ -242,14 +265,14 @@ describe("tracker client", () => {
     vi.stubGlobal("fetch", fetchMock)
 
     await expect(createComment("issue/1", "Comment body")).resolves.toEqual(
-      comment,
+      comment
     )
     expect(fetchMock).toHaveBeenCalledWith(
       "http://tracker.test/api/v1/issues/issue%2F1/comments",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ body: "Comment body" }),
-      }),
+      })
     )
   })
 
@@ -261,14 +284,14 @@ describe("tracker client", () => {
     vi.stubGlobal("fetch", fetchMock)
 
     await expect(updateComment("comment/1", "Updated body")).resolves.toEqual(
-      comment,
+      comment
     )
     expect(fetchMock).toHaveBeenCalledWith(
       "http://tracker.test/api/v1/comments/comment%2F1",
       expect.objectContaining({
         method: "PATCH",
         body: JSON.stringify({ body: "Updated body" }),
-      }),
+      })
     )
   })
 
@@ -284,7 +307,7 @@ describe("tracker client", () => {
       "http://tracker.test/api/v1/comments/comment%2F1",
       expect.objectContaining({
         method: "DELETE",
-      }),
+      })
     )
   })
 
@@ -300,7 +323,7 @@ describe("tracker client", () => {
       "http://tracker.test/api/v1/issues/issue%2F1/links",
       expect.objectContaining({
         method: "GET",
-      }),
+      })
     )
   })
 
@@ -322,7 +345,7 @@ describe("tracker client", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify(body),
-      }),
+      })
     )
   })
 
@@ -343,7 +366,75 @@ describe("tracker client", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify(body),
-      }),
+      })
+    )
+  })
+
+  it("manages saved issue views", async () => {
+    const createBody = {
+      name: "My work",
+      filters: {
+        query: "API",
+      },
+    }
+    const updateBody = {
+      name: "Backend review",
+    }
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ views: [issueView] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ view: issueView }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ view: { ...issueView, name: "Backend review" } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ view: issueView }),
+      })
+    vi.stubGlobal("fetch", fetchMock)
+
+    await expect(listIssueViews("radial/api")).resolves.toEqual([issueView])
+    await expect(createIssueView("radial/api", createBody)).resolves.toEqual(
+      issueView
+    )
+    await expect(updateIssueView("issue-view/1", updateBody)).resolves.toEqual({
+      ...issueView,
+      name: "Backend review",
+    })
+    await expect(deleteIssueView("issue-view/1")).resolves.toEqual(issueView)
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "http://tracker.test/api/v1/projects/radial%2Fapi/views",
+      expect.objectContaining({ method: "GET" })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "http://tracker.test/api/v1/projects/radial%2Fapi/views",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify(createBody),
+      })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "http://tracker.test/api/v1/views/issue-view%2F1",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify(updateBody),
+      })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      "http://tracker.test/api/v1/views/issue-view%2F1",
+      expect.objectContaining({ method: "DELETE" })
     )
   })
 
@@ -359,7 +450,7 @@ describe("tracker client", () => {
       "http://tracker.test/api/v1/users/me",
       expect.objectContaining({
         method: "GET",
-      }),
+      })
     )
   })
 })

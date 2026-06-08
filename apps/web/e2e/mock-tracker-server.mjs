@@ -41,6 +41,7 @@ function createSeedIssue(body) {
     state: body.state ?? body.state_name ?? "Todo",
     branch_name: body.branch_name ?? null,
     url: body.url ?? null,
+    assignee: body.assignee ?? null,
     labels: body.labels ?? [],
     blocked_by: body.blocked_by ?? [],
     created_at: createdAt,
@@ -49,6 +50,16 @@ function createSeedIssue(body) {
 
   issues.push(issue)
   return issue
+}
+
+function optionalString(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : null
+}
+
+function stringList(value) {
+  return Array.isArray(value)
+    ? value.map((item) => String(item).trim()).filter((item) => item.length > 0)
+    : []
 }
 
 function resetStore() {
@@ -75,6 +86,7 @@ function resetStore() {
     description: "Verify tracker search filters against workflow states.",
     state: "Todo",
     priority: 1,
+    assignee: "me",
     labels: ["api", "contract"],
     blocked_by: ["issue-1"],
   })
@@ -108,6 +120,7 @@ function issueSummary(issue) {
     state: issue.state,
     branch_name: issue.branch_name,
     url: issue.url,
+    assignee: issue.assignee ?? null,
     labels: issue.labels,
     blocked_by: issue.blocked_by.map((blockerId) => {
       const blocker = findIssue(blockerId)
@@ -130,7 +143,9 @@ function issueDetail(issue) {
       (comment) => comment.issue_id === issue.id && !comment.resolved
     ),
     links: links.filter((link) => link.issue_id === issue.id),
-    relations: relations.filter((relation) => relation.source_issue_id === issue.id),
+    relations: relations.filter(
+      (relation) => relation.source_issue_id === issue.id
+    ),
   }
 }
 
@@ -212,6 +227,12 @@ async function handleRequest(request, response) {
     const results = issues
       .filter((issue) => issue.project === body.project)
       .filter((issue) => selectedStates.has(issue.state.toLowerCase()))
+      .filter(
+        (issue) =>
+          !body.assignee ||
+          String(issue.assignee ?? "").toLowerCase() ===
+            String(body.assignee).trim().toLowerCase()
+      )
       .filter((issue) => matchesSearch(issue, String(body.q ?? "")))
       .map(issueSummary)
 
@@ -229,7 +250,10 @@ async function handleRequest(request, response) {
       state_name: body.state_name ? String(body.state_name) : undefined,
       priority: body.priority ?? null,
       labels: Array.isArray(body.labels) ? body.labels.map(String) : [],
-      blocked_by: Array.isArray(body.blocked_by) ? body.blocked_by.map(String) : [],
+      assignee: body.assignee ? String(body.assignee) : undefined,
+      blocked_by: Array.isArray(body.blocked_by)
+        ? body.blocked_by.map(String)
+        : [],
       branch_name: body.branch_name ? String(body.branch_name) : undefined,
       url: body.url ? String(body.url) : undefined,
     })
@@ -252,7 +276,36 @@ async function handleRequest(request, response) {
 
     if (request.method === "PATCH") {
       const body = await readBody(request)
-      issue.state = String(body.state ?? body.state_name ?? issue.state)
+      if ("title" in body) {
+        issue.title = String(body.title).trim()
+      }
+      if ("description" in body) {
+        issue.description = optionalString(body.description)
+      }
+      if ("state" in body || "state_name" in body) {
+        issue.state = String(body.state ?? body.state_name ?? issue.state)
+      }
+      if ("priority" in body) {
+        issue.priority =
+          body.priority === null || body.priority === undefined
+            ? null
+            : Number(body.priority)
+      }
+      if ("labels" in body) {
+        issue.labels = stringList(body.labels)
+      }
+      if ("blocked_by" in body) {
+        issue.blocked_by = stringList(body.blocked_by)
+      }
+      if ("branch_name" in body) {
+        issue.branch_name = optionalString(body.branch_name)
+      }
+      if ("url" in body) {
+        issue.url = optionalString(body.url)
+      }
+      if ("assignee" in body) {
+        issue.assignee = optionalString(body.assignee)
+      }
       issue.updated_at = now()
       sendJson(response, 200, { issue: issueDetail(issue) })
       return
@@ -335,7 +388,9 @@ async function handleRequest(request, response) {
     return
   }
 
-  const relationsMatch = pathname.match(/^\/api\/v1\/issues\/([^/]+)\/relations$/)
+  const relationsMatch = pathname.match(
+    /^\/api\/v1\/issues\/([^/]+)\/relations$/
+  )
   if (relationsMatch && request.method === "POST") {
     const issueId = decodeURIComponent(relationsMatch[1])
     if (!findIssue(issueId)) {

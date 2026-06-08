@@ -24,6 +24,7 @@ import type { NormalizedIssue } from "@/lib/tracker/types"
 
 type IssueKanbanBoardProps = {
   issues: NormalizedIssue[]
+  showEmptyStates?: boolean
 }
 
 function cloneIssue(issue: NormalizedIssue): NormalizedIssue {
@@ -92,7 +93,10 @@ function restoreIssueFromSnapshot(
   return restoredColumns
 }
 
-function IssueKanbanBoard({ issues }: IssueKanbanBoardProps) {
+function IssueKanbanBoard({
+  issues,
+  showEmptyStates = true,
+}: IssueKanbanBoardProps) {
   const [columns, setColumns] = React.useState<IssuesByState>(() =>
     groupIssuesByState(issues)
   )
@@ -208,6 +212,10 @@ function IssueKanbanBoard({ issues }: IssueKanbanBoardProps) {
     [issues, startTransition, updateColumns]
   )
 
+  const visibleStates = showEmptyStates
+    ? WORKFLOW_STATES
+    : WORKFLOW_STATES.filter((state) => columns[state].length > 0)
+
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
       {error ? (
@@ -229,7 +237,12 @@ function IssueKanbanBoard({ issues }: IssueKanbanBoardProps) {
         onValueChange={handleValueChange}
       >
         <KanbanBoard className="flex min-h-[calc(100svh-12rem)] min-w-0 flex-1 items-stretch gap-3 overflow-x-auto rounded-md border border-border/80 bg-background/70 p-3 pb-4 shadow-xs">
-          {WORKFLOW_STATES.map((state) => (
+          {visibleStates.length === 0 ? (
+            <div className="flex min-h-32 w-full items-center justify-center rounded-sm border border-dashed border-border bg-background/60 px-3 text-center text-xs text-muted-foreground">
+              No matching issues
+            </div>
+          ) : null}
+          {visibleStates.map((state) => (
             <KanbanColumn
               aria-label={`${state} issue column`}
               className="flex w-72 shrink-0 flex-col gap-0 rounded-md border border-border bg-muted/35 p-0 shadow-xs transition-colors"

@@ -5,6 +5,7 @@ import { redirect } from "next/navigation"
 import {
   parseCommentBody,
   parseIssueForm,
+  parseIssueUpdateForm,
   parseLinkForm,
   parseRelationForm,
 } from "@/lib/issues/forms"
@@ -15,6 +16,7 @@ import {
   createRelation,
   deactivateComment,
   updateComment,
+  updateIssue,
   updateIssueState,
 } from "@/lib/tracker/client"
 import type { WorkflowState } from "@/lib/tracker/constants"
@@ -31,6 +33,13 @@ export async function updateIssueStateAction(
 export async function createIssueAction(formData: FormData) {
   const issue = await createIssue(parseIssueForm(formData))
   revalidatePath("/")
+  redirect(`/issues/${issue.id}`)
+}
+
+export async function updateIssueAction(issueId: string, formData: FormData) {
+  const issue = await updateIssue(issueId, parseIssueUpdateForm(formData))
+  revalidatePath("/")
+  revalidatePath(`/issues/${issueId}`)
   redirect(`/issues/${issue.id}`)
 }
 

@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import type { IssueSortKey } from "@/lib/issues/board"
 import type { NormalizedIssue } from "@/lib/tracker/types"
 import Page from "./page"
 
@@ -9,16 +10,32 @@ const { searchIssuesMock } = vi.hoisted(() => ({
 
 vi.mock("@/components/issues/board-toolbar", () => ({
   BoardToolbar: ({
+    assignee,
     issueCount,
+    label,
     project,
     query,
+    showEmptyStates,
+    sort,
   }: {
+    assignee: string
     issueCount: number
+    label: string
     project: string
     query: string
+    showEmptyStates: boolean
+    sort?: IssueSortKey
   }) => (
     <div data-testid="toolbar">
-      {project}:{query}:{issueCount}
+      {[
+        project,
+        query,
+        assignee,
+        label,
+        sort ?? "",
+        String(showEmptyStates),
+        issueCount,
+      ].join(":")}
     </div>
   ),
 }))
@@ -27,12 +44,19 @@ vi.mock("@/components/issues/issue-kanban-board", async () => {
   const React = await vi.importActual<typeof import("react")>("react")
 
   return {
-    IssueKanbanBoard: ({ issues }: { issues: NormalizedIssue[] }) => {
+    IssueKanbanBoard: ({
+      issues,
+      showEmptyStates,
+    }: {
+      issues: NormalizedIssue[]
+      showEmptyStates?: boolean
+    }) => {
       const [mountedIssues] = React.useState(issues)
 
       return (
         <div data-testid="board">
           {mountedIssues.map((issue) => issue.identifier).join(",")}
+          <span data-testid="show-empty">{String(showEmptyStates)}</span>
         </div>
       )
     },
@@ -53,6 +77,7 @@ const issues: NormalizedIssue[] = [
     state: "Todo",
     branch_name: null,
     url: null,
+    assignee: "me",
     labels: [],
     blocked_by: [],
     created_at: null,
@@ -67,6 +92,7 @@ const issues: NormalizedIssue[] = [
     state: "In Progress",
     branch_name: null,
     url: null,
+    assignee: null,
     labels: [],
     blocked_by: [],
     created_at: null,
@@ -95,7 +121,9 @@ describe("Page", () => {
       project: "radial",
       states: expect.any(Array),
     })
-    expect(screen.getByTestId("toolbar")).toHaveTextContent("radial:auth:1")
+    expect(screen.getByTestId("toolbar")).toHaveTextContent(
+      "radial:auth::::true:1"
+    )
     expect(screen.getByTestId("board")).toHaveTextContent("RAD-1")
     expect(screen.getByTestId("board")).not.toHaveTextContent("RAD-2")
   })
@@ -112,11 +140,13 @@ describe("Page", () => {
       })
     )
 
-    expect(screen.getByTestId("toolbar")).toHaveTextContent("radial:auth:0")
+    expect(screen.getByTestId("toolbar")).toHaveTextContent(
+      "radial:auth::::true:0"
+    )
     expect(
       screen.getByText("tracker_request_failed: Tracker unavailable.")
     ).toBeInTheDocument()
-    expect(screen.getByTestId("board")).toHaveTextContent("")
+    expect(screen.getByTestId("board")).not.toHaveTextContent("RAD-")
   })
 
   it("remounts the board when the active scope changes", async () => {
@@ -139,5 +169,48 @@ describe("Page", () => {
 
     expect(screen.getByTestId("board")).toHaveTextContent("RAD-2")
     expect(screen.getByTestId("board")).not.toHaveTextContent("RAD-1")
+  })
+
+  it("applies URL filters and display options to the board", async () => {
+    searchIssuesMock.mockResolvedValueOnce([
+      {
+        ...issues[0],
+        labels: ["backend"],
+        priority: 2,
+        updated_at: "2026-06-01T00:00:00.000Z",
+      },
+      {
+        ...issues[1],
+        assignee: "me",
+        labels: ["backend"],
+        priority: 1,
+        updated_at: "2026-06-02T00:00:00.000Z",
+      },
+    ])
+
+    render(
+      await Page({
+        searchParams: Promise.resolve({
+          project: "radial",
+          q: "work",
+          assignee: "me",
+          label: "backend",
+          sort: "priority",
+          show_empty: "false",
+        }),
+      })
+    )
+
+    expect(searchIssuesMock).toHaveBeenCalledWith({
+      project: "radial",
+      states: expect.any(Array),
+      assignee: "me",
+    })
+    expect(screen.getByTestId("toolbar")).toHaveTextContent(
+      "radial:work:me:backend:priority:false:1"
+    )
+    expect(screen.getByTestId("board")).toHaveTextContent("RAD-2")
+    expect(screen.getByTestId("board")).not.toHaveTextContent("RAD-1")
+    expect(screen.getByTestId("show-empty")).toHaveTextContent("false")
   })
 })

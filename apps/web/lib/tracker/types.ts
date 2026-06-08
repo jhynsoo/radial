@@ -20,6 +20,13 @@ export type ErrorCategory =
   | "tracker_relation_create_failed"
 
 export type RelationType = "related" | "blocked_by"
+export type IssueViewLayout = "kanban" | "list"
+export type IssueViewGroupBy = "state" | "assignee" | "priority"
+export type IssueViewSortBy =
+  | "created_at"
+  | "updated_at"
+  | "priority"
+  | "identifier"
 
 export interface TrackerErrorBody {
   error: {
@@ -43,6 +50,9 @@ export interface NormalizedIssue {
   state: string
   branch_name: string | null
   url: string | null
+  assignee?: string | null
+  milestone_id?: string | null
+  cycle_id?: string | null
   labels: string[]
   blocked_by: IssueBlocker[]
   created_at: string | null
@@ -73,6 +83,30 @@ export interface IssueRelation {
   relation_type: RelationType
   target_issue_id: string
   created_at: string
+}
+
+export interface IssueViewFilters {
+  query: string | null
+  states: string[]
+  assignee: string | null
+  labels: string[]
+}
+
+export interface IssueViewDisplayOptions {
+  layout: IssueViewLayout
+  group_by: IssueViewGroupBy
+  sort_by: IssueViewSortBy
+  show_empty_states: boolean
+}
+
+export interface IssueView {
+  id: string
+  project_slug: string
+  name: string
+  filters: IssueViewFilters
+  display_options: IssueViewDisplayOptions
+  created_at: string
+  updated_at: string
 }
 
 export interface IssueDetail extends NormalizedIssue {
@@ -109,4 +143,31 @@ export interface CreateIssueBody {
   labels?: string[]
   assignee?: string
   blocked_by?: Array<string | IssueBlocker>
+}
+
+export interface UpdateIssueBody {
+  title?: string
+  description?: string | null
+  state?: string
+  state_name?: string
+  branch_name?: string | null
+  url?: string | null
+  priority?: number | null
+  labels?: string[]
+  assignee?: string | null
+  milestone_id?: string | null
+  cycle_id?: string | null
+  blocked_by?: Array<string | IssueBlocker>
+}
+
+export interface CreateIssueViewBody {
+  name: string
+  filters?: Partial<IssueViewFilters>
+  display_options?: Partial<IssueViewDisplayOptions>
+}
+
+export interface UpdateIssueViewBody {
+  name?: string
+  filters?: Partial<IssueViewFilters>
+  display_options?: Partial<IssueViewDisplayOptions>
 }
