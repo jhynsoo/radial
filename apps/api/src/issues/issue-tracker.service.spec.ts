@@ -249,6 +249,93 @@ describe("IssueTrackerService", () => {
     expect(view.filters.states).toEqual(["QA Review"])
   })
 
+  it("rejects removing workflow states that are still used by issues", async () => {
+    await service.createTeam({
+      key: "RAD",
+      name: "Radial Team",
+    })
+    await service.replaceWorkflowStates("RAD", {
+      states: [
+        { name: "Todo", type: "unstarted" },
+        { name: "QA Review", type: "started" },
+        { name: "Done", type: "completed" },
+      ],
+    })
+    const issue = await service.createIssue({
+      project: "radial",
+      title: "Needs QA",
+      state_name: "QA Review",
+    })
+
+    await expectTrackerError(
+      () =>
+        service.replaceWorkflowStates("RAD", {
+          states: [
+            { name: "Todo", type: "unstarted" },
+            { name: "Done", type: "completed" },
+          ],
+        }),
+      "tracker_unknown_payload"
+    )
+
+    expect(
+      (
+        await service.searchIssues({
+          project: "radial",
+          states: ["QA Review"],
+        })
+      ).map((candidate) => candidate.id)
+    ).toEqual([issue.id])
+    expect(
+      (await service.listWorkflowStates("RAD")).map((state) => state.name)
+    ).toEqual(["Todo", "QA Review", "Done"])
+  })
+
+  it("clears removed workflow states from state validation", async () => {
+    const project = await service.createProject({
+      slug: "radial",
+      name: "Radial",
+    })
+    await service.createTeam({
+      key: "RAD",
+      name: "Radial Team",
+    })
+    await service.replaceWorkflowStates("RAD", {
+      states: [
+        { name: "Todo", type: "unstarted" },
+        { name: "QA Review", type: "started" },
+        { name: "Done", type: "completed" },
+      ],
+    })
+    const issue = await service.createIssue({
+      project: project.slug,
+      title: "Ready for work",
+      state_name: "Todo",
+    })
+
+    await service.replaceWorkflowStates("RAD", {
+      states: [
+        { name: "Todo", type: "unstarted" },
+        { name: "Done", type: "completed" },
+      ],
+    })
+
+    await expectTrackerError(
+      () => service.updateIssue(issue.id, { state: "QA Review" }),
+      "tracker_state_not_found"
+    )
+    await expectTrackerError(
+      () =>
+        service.createIssueView(project.slug, {
+          name: "QA board",
+          filters: {
+            states: ["QA Review"],
+          },
+        }),
+      "tracker_state_not_found"
+    )
+  })
+
   it("creates projects, milestones, cycles, and links them to issues", async () => {
     await service.createTeam({
       key: "RAD",
@@ -941,6 +1028,7 @@ function repositoryWithWriteMisses(): IssueRepository {
     createTeam: jest.fn(),
     listWorkflowStates: jest.fn().mockResolvedValue([]),
     replaceWorkflowStates: jest.fn().mockResolvedValue(null),
+    findIssueStatesInUse: jest.fn().mockResolvedValue([]),
     findIssuesByIds: jest.fn().mockResolvedValue([]),
     findIssueById: jest.fn((issueId: string) =>
       Promise.resolve(
@@ -979,6 +1067,7 @@ function repositoryWithIssue(issue: IssueRecord): IssueRepository {
     createTeam: jest.fn(),
     listWorkflowStates: jest.fn().mockResolvedValue([]),
     replaceWorkflowStates: jest.fn().mockResolvedValue([]),
+    findIssueStatesInUse: jest.fn().mockResolvedValue([]),
     findIssuesByIds: jest.fn((ids: string[]) =>
       Promise.resolve(ids.includes(issue.id) ? [issue] : [])
     ),

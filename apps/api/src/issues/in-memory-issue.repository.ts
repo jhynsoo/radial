@@ -240,6 +240,23 @@ export class InMemoryIssueRepository implements IssueRepository {
     return team.workflow_states.map((state) => ({ ...state }))
   }
 
+  async findIssueStatesInUse(states: string[]): Promise<string[]> {
+    await this.asyncBoundary
+
+    const targetKeys = new Set(states.map((state) => stateKey(state)))
+    const inUse = new Map<string, string>()
+
+    for (const issue of this.issues.values()) {
+      const key = stateKey(issue.state)
+
+      if (targetKeys.has(key) && !inUse.has(key)) {
+        inUse.set(key, issue.state)
+      }
+    }
+
+    return [...inUse.values()]
+  }
+
   async searchIssues(params: {
     project: string
     states: string[]

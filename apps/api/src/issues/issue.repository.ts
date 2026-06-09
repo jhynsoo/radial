@@ -147,6 +147,7 @@ export interface IssueRepository {
     states: NewWorkflowStateRecord[],
     updatedAt: string
   ): Promise<IssueWorkflowState[] | null>
+  findIssueStatesInUse(states: string[]): Promise<string[]>
   searchIssues(params: {
     project: string
     states: string[]

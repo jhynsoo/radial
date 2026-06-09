@@ -73,6 +73,38 @@ describe("PrismaIssueRepository", () => {
     expect(prisma.assertDatabaseConfigured).toHaveBeenCalledTimes(2)
   })
 
+  it("finds issue states currently in use", async () => {
+    prisma.issue.findMany.mockResolvedValue([
+      persistedIssue({ state: "QA Review" }),
+    ])
+
+    await expect(
+      repository.findIssueStatesInUse(["QA Review", "Done"])
+    ).resolves.toEqual(["QA Review"])
+
+    const usageCall = firstCallArg<FindManyCall>(prisma.issue.findMany)
+    expect(usageCall.where).toEqual({
+      OR: [
+        {
+          state: {
+            equals: "QA Review",
+            mode: Prisma.QueryMode.insensitive,
+          },
+        },
+        {
+          state: {
+            equals: "Done",
+            mode: Prisma.QueryMode.insensitive,
+          },
+        },
+      ],
+    })
+    expect(usageCall.select).toEqual({
+      state: true,
+    })
+    expect(usageCall.distinct).toEqual(["state"])
+  })
+
   it("loads issues by id while preserving requested order", async () => {
     prisma.issue.findMany.mockResolvedValue([
       persistedIssue({ id: "issue-2", identifier: "RADIAL-2" }),
@@ -791,7 +823,9 @@ interface TransactionMock {
 
 interface FindManyCall {
   where: unknown
-  include: unknown
+  include?: unknown
+  select?: unknown
+  distinct?: unknown
   orderBy?: unknown
 }
 

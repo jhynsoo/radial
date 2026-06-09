@@ -435,6 +435,31 @@ export class PrismaIssueRepository implements IssueRepository {
     return issues.map((issue) => this.toIssueRecord(issue))
   }
 
+  async findIssueStatesInUse(states: string[]): Promise<string[]> {
+    this.prisma.assertDatabaseConfigured()
+
+    if (states.length === 0) {
+      return []
+    }
+
+    const issues = await this.prisma.issue.findMany({
+      where: {
+        OR: states.map((state) => ({
+          state: {
+            equals: state,
+            mode: Prisma.QueryMode.insensitive,
+          },
+        })),
+      },
+      select: {
+        state: true,
+      },
+      distinct: ["state"],
+    })
+
+    return issues.map((issue) => issue.state)
+  }
+
   async findIssuesByIds(ids: string[]): Promise<IssueRecord[]> {
     this.prisma.assertDatabaseConfigured()
 

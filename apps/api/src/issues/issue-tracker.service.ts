@@ -108,9 +108,7 @@ export class IssueTrackerService {
   constructor(
     @Inject(ISSUE_REPOSITORY) private readonly issueRepository: IssueRepository
   ) {
-    for (const state of DEFAULT_STATES) {
-      this.registerState(state)
-    }
+    this.resetWorkflowStateCache()
   }
 
   async searchIssues(payload: unknown): Promise<NormalizedIssue[]> {
@@ -148,9 +146,7 @@ export class IssueTrackerService {
   async listTeams(): Promise<IssueTeam[]> {
     const teams = await this.issueRepository.listTeams()
 
-    for (const team of teams) {
-      this.registerWorkflowStates(team.workflow_states)
-    }
+    this.rebuildWorkflowStateCache(teams)
 
     return teams
   }
@@ -416,13 +412,14 @@ export class IssueTrackerService {
 
   async listWorkflowStates(teamKey: string): Promise<IssueWorkflowState[]> {
     const key = this.normalizeTeamKey(teamKey)
-    const team = await this.issueRepository.findTeamByKey(key)
+    const teams = await this.issueRepository.listTeams()
+    const team = teams.find((candidate) => candidate.key === key)
 
     if (!team) {
       notFound("tracker_not_found", `Team '${key}' was not found.`)
     }
 
-    this.registerWorkflowStates(team.workflow_states)
+    this.rebuildWorkflowStateCache(teams)
 
     return team.workflow_states
   }
@@ -435,6 +432,16 @@ export class IssueTrackerService {
     const body = asRecord(payload)
     const updatedAt = nowIso()
     const states = this.readWorkflowStateRecords(key, body.states, updatedAt)
+    const existingTeam = await this.issueRepository.findTeamByKey(key)
+
+    if (!existingTeam) {
+      notFound("tracker_not_found", `Team '${key}' was not found.`)
+    }
+
+    await this.rejectWorkflowStatesInUse(
+      this.removedWorkflowStateNames(existingTeam.workflow_states, states)
+    )
+
     const updated = await this.issueRepository.replaceWorkflowStates(
       key,
       states,
@@ -445,7 +452,7 @@ export class IssueTrackerService {
       notFound("tracker_not_found", `Team '${key}' was not found.`)
     }
 
-    this.registerWorkflowStates(updated)
+    await this.reloadPersistedWorkflowStates()
 
     return updated
   }
@@ -1394,6 +1401,22 @@ export class IssueTrackerService {
     }
   }
 
+  private resetWorkflowStateCache(): void {
+    this.statesByKey.clear()
+
+    for (const state of DEFAULT_STATES) {
+      this.registerState(state)
+    }
+  }
+
+  private rebuildWorkflowStateCache(teams: IssueTeam[]): void {
+    this.resetWorkflowStateCache()
+
+    for (const team of teams) {
+      this.registerWorkflowStates(team.workflow_states)
+    }
+  }
+
   private registerState(state: string): string {
     const trimmed = state.trim()
 
@@ -1424,9 +1447,37 @@ export class IssueTrackerService {
   private async reloadPersistedWorkflowStates(): Promise<void> {
     const teams = await this.issueRepository.listTeams()
 
-    for (const team of teams) {
-      this.registerWorkflowStates(team.workflow_states)
+    this.rebuildWorkflowStateCache(teams)
+  }
+
+  private removedWorkflowStateNames(
+    existingStates: IssueWorkflowState[],
+    nextStates: IssueWorkflowState[]
+  ): string[] {
+    const nextStateKeys = new Set(
+      nextStates.map((state) => stateKey(state.name))
+    )
+
+    return existingStates
+      .filter((state) => !nextStateKeys.has(stateKey(state.name)))
+      .map((state) => state.name)
+  }
+
+  private async rejectWorkflowStatesInUse(states: string[]): Promise<void> {
+    if (states.length === 0) {
+      return
     }
+
+    const inUseStates = await this.issueRepository.findIssueStatesInUse(states)
+
+    if (inUseStates.length === 0) {
+      return
+    }
+
+    badRequest(
+      "tracker_unknown_payload",
+      `Workflow states cannot be removed while issues use them: ${inUseStates.join(", ")}.`
+    )
   }
 
   private publicBaseUrl(): string {
