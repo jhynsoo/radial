@@ -2,7 +2,7 @@ import Link from "next/link"
 
 import { createIssueAction } from "@/app/issues/actions"
 import { boardHref } from "@/lib/issues/navigation"
-import { WORKFLOW_STATES } from "@/lib/tracker/constants"
+import { stateKey, WORKFLOW_STATES } from "@/lib/tracker/constants"
 import type { IssueDetail } from "@/lib/tracker/types"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { cn } from "@workspace/ui/lib/utils"
@@ -46,10 +46,46 @@ type IssueFormProps = {
   defaultProject?: string
   issue?: IssueDetail
   submitLabel?: string
+  workflowStates?: readonly string[]
 }
 
 function blockerValue(issue?: IssueDetail): string {
   return issue?.blocked_by.map((blocker) => blocker.id).join(", ") ?? ""
+}
+
+function blockerMetadataValue(issue?: IssueDetail): string {
+  return issue?.blocked_by.length ? JSON.stringify(issue.blocked_by) : ""
+}
+
+function stateOptions(
+  issue: IssueDetail | undefined,
+  workflowStates: readonly string[] = WORKFLOW_STATES
+): string[] {
+  const options: string[] = []
+  const seen = new Set<string>()
+
+  for (const state of workflowStates.length > 0
+    ? workflowStates
+    : WORKFLOW_STATES) {
+    const trimmed = state.trim()
+    const key = stateKey(trimmed)
+
+    if (!trimmed || seen.has(key)) {
+      continue
+    }
+
+    seen.add(key)
+    options.push(trimmed)
+  }
+
+  if (issue?.state) {
+    const key = stateKey(issue.state)
+    if (!seen.has(key)) {
+      options.push(issue.state)
+    }
+  }
+
+  return options
 }
 
 export function IssueForm({
@@ -58,10 +94,12 @@ export function IssueForm({
   defaultProject = "",
   issue,
   submitLabel = "Create issue",
+  workflowStates = WORKFLOW_STATES,
 }: IssueFormProps) {
   const project = issue?.project ?? defaultProject
   const formAction = action ?? createIssueAction
   const resolvedCancelHref = cancelHref ?? boardHref(project)
+  const states = stateOptions(issue, workflowStates)
 
   return (
     <form action={formAction} className="flex flex-col gap-5">
@@ -86,10 +124,7 @@ export function IssueForm({
             name="state"
             required
           >
-            {issue && !WORKFLOW_STATES.some((state) => state === issue.state) ? (
-              <option value={issue.state}>{issue.state} (current)</option>
-            ) : null}
-            {WORKFLOW_STATES.map((state) => (
+            {states.map((state) => (
               <option key={state} value={state}>
                 {state}
               </option>
@@ -168,6 +203,13 @@ export function IssueForm({
             name="blocked_by"
             placeholder="issue-id-1, issue-id-2"
           />
+          {issue ? (
+            <input
+              defaultValue={blockerMetadataValue(issue)}
+              name="blocked_by_metadata"
+              type="hidden"
+            />
+          ) : null}
         </Field>
         <Field id="issue-branch" label="Branch">
           <input

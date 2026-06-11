@@ -30,10 +30,9 @@ describe("IssueForm", () => {
       "branch_name"
     )
     expect(screen.getByLabelText("URL")).toHaveAttribute("type", "url")
-    expect(screen.getByRole("button", { name: "Create issue" })).toHaveAttribute(
-      "type",
-      "submit"
-    )
+    expect(
+      screen.getByRole("button", { name: "Create issue" })
+    ).toHaveAttribute("type", "submit")
     expect(screen.getByRole("link", { name: "Cancel" })).toHaveAttribute(
       "href",
       "/?project=radial"
@@ -41,7 +40,7 @@ describe("IssueForm", () => {
   })
 
   it("renders editable issue fields with existing values", () => {
-    render(
+    const { container } = render(
       <IssueForm
         cancelHref="/issues/issue-1"
         issue={issueDetail()}
@@ -60,6 +59,22 @@ describe("IssueForm", () => {
     expect(screen.getByLabelText("Blocked by")).toHaveValue(
       "issue-0, external-1"
     )
+    expect(
+      container.querySelector('input[name="blocked_by_metadata"]')
+    ).toHaveValue(
+      JSON.stringify([
+        {
+          id: "issue-0",
+          identifier: "RAD-0",
+          state: "Done",
+        },
+        {
+          id: "external-1",
+          identifier: "EXT-1",
+          state: null,
+        },
+      ])
+    )
     expect(screen.getByLabelText("Branch")).toHaveValue("feat/edit")
     expect(screen.getByLabelText("URL")).toHaveValue("https://example.com")
     expect(screen.getByRole("button", { name: "Save issue" })).toHaveAttribute(
@@ -69,6 +84,21 @@ describe("IssueForm", () => {
     expect(screen.getByRole("link", { name: "Cancel" })).toHaveAttribute(
       "href",
       "/issues/issue-1"
+    )
+  })
+
+  it("renders configured workflow state options", () => {
+    render(
+      <IssueForm
+        cancelHref="/issues/issue-1"
+        issue={issueDetail()}
+        submitLabel="Save issue"
+        workflowStates={["Todo", "QA Review", "Done"]}
+      />
+    )
+
+    expect(screen.getByRole("option", { name: "QA Review" })).toHaveValue(
+      "QA Review"
     )
   })
 })

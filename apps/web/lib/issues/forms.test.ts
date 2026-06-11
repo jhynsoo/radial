@@ -117,6 +117,38 @@ describe("issue form parsing", () => {
     })
   })
 
+  it("preserves existing external blocker metadata on issue updates", () => {
+    const formData = new FormData()
+    formData.set("title", " Updated title ")
+    formData.set("description", " Keep blockers ")
+    formData.set("state", "Todo")
+    formData.set("priority", "1")
+    formData.set("labels", "web")
+    formData.set("blocked_by", " external-1, new-external ")
+    formData.set("assignee", "me")
+    formData.set("branch_name", "feat/edit")
+    formData.set("url", "https://example.com")
+    formData.set(
+      "blocked_by_metadata",
+      JSON.stringify([
+        {
+          id: "external-1",
+          identifier: "EXT-1",
+          state: "Blocked",
+        },
+      ])
+    )
+
+    expect(parseIssueUpdateForm(formData).blocked_by).toEqual([
+      {
+        id: "external-1",
+        identifier: "EXT-1",
+        state: "Blocked",
+      },
+      "new-external",
+    ])
+  })
+
   it("parses comment, link, and relation forms", () => {
     const comment = new FormData()
     comment.set("body", "Ready for review")
