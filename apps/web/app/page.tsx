@@ -1,11 +1,8 @@
 import { BoardToolbar } from "@/components/issues/board-toolbar"
 import { IssueKanbanBoard } from "@/components/issues/issue-kanban-board"
-import {
-  filterIssues,
-  normalizeWorkflowStates,
-  type IssueSortKey,
-} from "@/lib/issues/board"
-import { listTeams, listWorkflowStates, searchIssues } from "@/lib/tracker/client"
+import { filterIssues, type IssueSortKey } from "@/lib/issues/board"
+import { loadConfiguredWorkflowStates } from "@/lib/issues/workflow-states"
+import { searchIssues } from "@/lib/tracker/client"
 import { WORKFLOW_STATES } from "@/lib/tracker/constants"
 import type { NormalizedIssue } from "@/lib/tracker/types"
 
@@ -83,20 +80,6 @@ function parseShowEmptyStates(value: string): boolean {
   return value !== "false"
 }
 
-async function loadWorkflowStates(teamKey: string): Promise<string[]> {
-  try {
-    const states = teamKey
-      ? (await listWorkflowStates(teamKey)).map((state) => state.name)
-      : (await listTeams()).flatMap((team) =>
-          team.workflow_states.map((state) => state.name)
-        )
-
-    return normalizeWorkflowStates(states)
-  } catch {
-    return [...WORKFLOW_STATES]
-  }
-}
-
 export default async function Page({ searchParams }: PageProps) {
   const params = await searchParams
   const project = firstSearchParam(params?.project)
@@ -114,7 +97,7 @@ export default async function Page({ searchParams }: PageProps) {
 
   if (project) {
     try {
-      workflowStates = await loadWorkflowStates(team)
+      workflowStates = await loadConfiguredWorkflowStates(team)
       issues = filterIssues(
         await searchIssues({
           project,
@@ -143,6 +126,7 @@ export default async function Page({ searchParams }: PageProps) {
         query={query}
         showEmptyStates={showEmptyStates}
         sort={sort}
+        team={team}
       />
       <section className="flex min-h-0 flex-1 flex-col gap-3 px-3 py-3 sm:px-4 lg:px-5">
         {loadError ? (

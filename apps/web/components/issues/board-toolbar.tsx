@@ -14,15 +14,25 @@ type BoardToolbarProps = {
   query: string
   showEmptyStates: boolean
   sort?: IssueSortKey
+  team: string
 }
 
-function newIssueHref(project: string) {
+function newIssueHref(project: string, team: string) {
   const trimmedProject = project.trim()
-  if (!trimmedProject) {
+  const trimmedTeam = team.trim()
+
+  if (!trimmedProject && !trimmedTeam) {
     return "/issues/new"
   }
 
-  const params = new URLSearchParams({ project: trimmedProject })
+  const params = new URLSearchParams()
+  if (trimmedProject) {
+    params.set("project", trimmedProject)
+  }
+  if (trimmedTeam) {
+    params.set("team", trimmedTeam)
+  }
+
   return `/issues/new?${params.toString()}`
 }
 
@@ -38,8 +48,10 @@ function BoardToolbar({
   query,
   showEmptyStates,
   sort,
+  team,
 }: BoardToolbarProps) {
   const trimmedProject = project.trim()
+  const trimmedTeam = team.trim()
   const hasFilters = Boolean(query || assignee || label)
   const hasDisplayOptions = Boolean(sort || !showEmptyStates)
 
@@ -82,6 +94,9 @@ function BoardToolbar({
           <form className="flex min-w-0 flex-1 flex-col gap-2" method="get">
             <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-[minmax(10rem,1fr)_minmax(8rem,0.7fr)_minmax(8rem,0.7fr)_9rem_auto] sm:items-end">
               <input type="hidden" name="project" value={project} />
+              {trimmedTeam ? (
+                <input type="hidden" name="team" value={trimmedTeam} />
+              ) : null}
               <div className="flex min-w-0 flex-col gap-1.5">
                 <label className="text-sm font-medium" htmlFor="issue-search">
                   Search
@@ -155,7 +170,7 @@ function BoardToolbar({
           </form>
           <Link
             className={cn(buttonVariants(), "self-start")}
-            href={newIssueHref(project)}
+            href={newIssueHref(project, team)}
           >
             <Plus data-icon="inline-start" />
             New issue

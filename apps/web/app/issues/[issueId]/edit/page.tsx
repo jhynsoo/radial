@@ -2,14 +2,8 @@ import { notFound } from "next/navigation"
 
 import { updateIssueAction } from "@/app/issues/actions"
 import { IssueForm } from "@/components/issues/issue-form"
-import { normalizeWorkflowStates } from "@/lib/issues/board"
-import {
-  getIssue,
-  listTeams,
-  listWorkflowStates,
-  TrackerClientError,
-} from "@/lib/tracker/client"
-import { WORKFLOW_STATES } from "@/lib/tracker/constants"
+import { loadConfiguredWorkflowStates } from "@/lib/issues/workflow-states"
+import { getIssue, TrackerClientError } from "@/lib/tracker/client"
 
 type SearchParamValue = string | string[] | undefined
 
@@ -22,20 +16,6 @@ type PageProps = {
 
 function firstSearchParam(value: SearchParamValue): string {
   return (Array.isArray(value) ? value[0] : value)?.trim() ?? ""
-}
-
-async function loadWorkflowStates(teamKey: string): Promise<string[]> {
-  try {
-    const states = teamKey
-      ? (await listWorkflowStates(teamKey)).map((state) => state.name)
-      : (await listTeams()).flatMap((team) =>
-          team.workflow_states.map((state) => state.name)
-        )
-
-    return normalizeWorkflowStates(states)
-  } catch {
-    return [...WORKFLOW_STATES]
-  }
 }
 
 export default async function EditIssuePage({
@@ -59,7 +39,7 @@ export default async function EditIssuePage({
       throw error
     }
   })()
-  const workflowStates = await loadWorkflowStates(team)
+  const workflowStates = await loadConfiguredWorkflowStates(team)
 
   return (
     <main className="min-h-svh bg-background text-foreground">

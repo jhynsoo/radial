@@ -49,6 +49,7 @@ vi.mock("@/components/issues/board-toolbar", () => ({
     query,
     showEmptyStates,
     sort,
+    team,
   }: {
     assignee: string
     issueCount: number
@@ -57,8 +58,9 @@ vi.mock("@/components/issues/board-toolbar", () => ({
     query: string
     showEmptyStates: boolean
     sort?: IssueSortKey
+    team: string
   }) => (
-    <div data-testid="toolbar">
+    <div data-team={team} data-testid="toolbar">
       {[
         project,
         query,
@@ -227,6 +229,7 @@ describe("Page", () => {
     expect(screen.getByTestId("workflow-states")).toHaveTextContent(
       "Todo,QA Review"
     )
+    expect(screen.getByTestId("toolbar")).toHaveAttribute("data-team", "RAD")
   })
 
   it("renders the toolbar and error panel when loading issues fails", async () => {
