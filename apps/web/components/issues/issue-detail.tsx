@@ -89,20 +89,28 @@ export function IssueDetailView({ issue }: { issue: IssueDetail }) {
           >
             Back to board
           </Link>
-          {sourceHref ? (
-            <a
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
               className={cn(buttonVariants({ variant: "outline" }), "h-7")}
-              href={sourceHref}
-              rel="noreferrer"
-              target="_blank"
+              href={`/issues/${issue.id}/edit`}
             >
-              Source issue
-            </a>
-          ) : issue.url ? (
-            <span className="max-w-full truncate text-xs text-muted-foreground">
-              Source: {issue.url}
-            </span>
-          ) : null}
+              Edit issue
+            </Link>
+            {sourceHref ? (
+              <a
+                className={cn(buttonVariants({ variant: "outline" }), "h-7")}
+                href={sourceHref}
+                rel="noreferrer"
+                target="_blank"
+              >
+                Source issue
+              </a>
+            ) : issue.url ? (
+              <span className="max-w-full truncate text-xs text-muted-foreground">
+                Source: {issue.url}
+              </span>
+            ) : null}
+          </div>
         </div>
 
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">

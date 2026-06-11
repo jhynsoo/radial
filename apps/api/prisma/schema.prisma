@@ -14,6 +14,91 @@ model ProjectCounter {
   @@map("project_counters")
 }
 
+model Team {
+  key            String          @id
+  name           String
+  description    String?
+  createdAt      DateTime        @map("created_at")
+  updatedAt      DateTime        @map("updated_at")
+  workflowStates WorkflowState[]
+  cycles         Cycle[]
+
+  @@map("teams")
+}
+
+model WorkflowState {
+  id        String   @id
+  teamKey   String   @map("team_key")
+  name      String
+  type      String
+  position  Int
+  createdAt DateTime @map("created_at")
+  updatedAt DateTime @map("updated_at")
+  team      Team     @relation(fields: [teamKey], references: [key], onDelete: Cascade)
+
+  @@unique([teamKey, name])
+  @@index([teamKey, position])
+  @@map("workflow_states")
+}
+
+model Project {
+  slug        String             @id
+  name        String
+  description String?
+  status      String
+  createdAt   DateTime           @map("created_at")
+  updatedAt   DateTime           @map("updated_at")
+  milestones  ProjectMilestone[]
+  views       IssueView[]
+
+  @@map("projects")
+}
+
+model ProjectMilestone {
+  id          String    @id
+  projectSlug String    @map("project_slug")
+  name        String
+  description String?
+  targetDate  DateTime? @map("target_date")
+  position    Int
+  createdAt   DateTime  @map("created_at")
+  updatedAt   DateTime  @map("updated_at")
+  project     Project   @relation(fields: [projectSlug], references: [slug], onDelete: Cascade)
+  issues      Issue[]
+
+  @@index([projectSlug, position])
+  @@map("project_milestones")
+}
+
+model Cycle {
+  id        String   @id
+  teamKey   String   @map("team_key")
+  name      String
+  startsAt  DateTime @map("starts_at")
+  endsAt    DateTime @map("ends_at")
+  createdAt DateTime @map("created_at")
+  updatedAt DateTime @map("updated_at")
+  team      Team     @relation(fields: [teamKey], references: [key], onDelete: Cascade)
+  issues    Issue[]
+
+  @@index([teamKey, startsAt])
+  @@map("cycles")
+}
+
+model IssueView {
+  id             String   @id
+  projectSlug    String   @map("project_slug")
+  name           String
+  filters        Json
+  displayOptions Json     @map("display_options")
+  createdAt      DateTime @map("created_at")
+  updatedAt      DateTime @map("updated_at")
+  project        Project  @relation(fields: [projectSlug], references: [slug], onDelete: Cascade)
+
+  @@index([projectSlug, name])
+  @@map("issue_views")
+}
+
 model Issue {
   id               String                 @id
   identifier       String
@@ -25,6 +110,8 @@ model Issue {
   branchName       String?                @map("branch_name")
   url              String?
   assignee         String?
+  milestoneId      String?                @map("milestone_id")
+  cycleId          String?                @map("cycle_id")
   createdAt        DateTime               @map("created_at")
   updatedAt        DateTime               @map("updated_at")
   labels           IssueLabel[]
@@ -35,9 +122,13 @@ model Issue {
   links            IssueLink[]
   relations        IssueRelation[]        @relation("SourceIssueRelations")
   targetedBy       IssueRelation[]        @relation("TargetIssueRelations")
+  milestone        ProjectMilestone?      @relation(fields: [milestoneId], references: [id], onDelete: SetNull)
+  cycle            Cycle?                 @relation(fields: [cycleId], references: [id], onDelete: SetNull)
 
   @@unique([project, identifier])
   @@index([project, state])
+  @@index([milestoneId])
+  @@index([cycleId])
   @@map("issues")
 }
 

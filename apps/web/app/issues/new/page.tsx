@@ -1,10 +1,12 @@
 import { IssueForm } from "@/components/issues/issue-form"
+import { loadConfiguredWorkflowStates } from "@/lib/issues/workflow-states"
 
 type SearchParamValue = string | string[] | undefined
 
 type PageProps = {
   searchParams?: Promise<{
     project?: SearchParamValue
+    team?: SearchParamValue
   }>
 }
 
@@ -15,19 +17,21 @@ function firstSearchParam(value: SearchParamValue): string {
 export default async function NewIssuePage({ searchParams }: PageProps) {
   const params = await searchParams
   const project = firstSearchParam(params?.project)
+  const team = firstSearchParam(params?.team)
+  const workflowStates = await loadConfiguredWorkflowStates(team)
 
   return (
     <main className="min-h-svh bg-background text-foreground">
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-4 py-4">
         <header className="flex flex-col gap-1 border-b border-border pb-4">
-          <p className="text-sm font-mono text-muted-foreground">
+          <p className="font-mono text-sm text-muted-foreground">
             Issue intake
           </p>
           <h1 className="text-2xl leading-tight font-semibold tracking-normal">
             Create issue
           </h1>
         </header>
-        <IssueForm defaultProject={project} />
+        <IssueForm defaultProject={project} workflowStates={workflowStates} />
       </div>
     </main>
   )

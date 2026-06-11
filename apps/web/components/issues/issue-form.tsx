@@ -2,7 +2,8 @@ import Link from "next/link"
 
 import { createIssueAction } from "@/app/issues/actions"
 import { boardHref } from "@/lib/issues/navigation"
-import { WORKFLOW_STATES } from "@/lib/tracker/constants"
+import { stateKey, WORKFLOW_STATES } from "@/lib/tracker/constants"
+import type { IssueDetail } from "@/lib/tracker/types"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -40,33 +41,90 @@ function Field({
 }
 
 type IssueFormProps = {
+  action?: (formData: FormData) => void | Promise<void>
+  cancelHref?: string
   defaultProject?: string
+  issue?: IssueDetail
+  submitLabel?: string
+  workflowStates?: readonly string[]
 }
 
-export function IssueForm({ defaultProject = "" }: IssueFormProps) {
+function blockerValue(issue?: IssueDetail): string {
+  return issue?.blocked_by.map((blocker) => blocker.id).join(", ") ?? ""
+}
+
+function blockerMetadataValue(issue?: IssueDetail): string {
+  return issue?.blocked_by.length ? JSON.stringify(issue.blocked_by) : ""
+}
+
+function stateOptions(
+  issue: IssueDetail | undefined,
+  workflowStates: readonly string[] = WORKFLOW_STATES
+): string[] {
+  const options: string[] = []
+  const seen = new Set<string>()
+
+  for (const state of workflowStates.length > 0
+    ? workflowStates
+    : WORKFLOW_STATES) {
+    const trimmed = state.trim()
+    const key = stateKey(trimmed)
+
+    if (!trimmed || seen.has(key)) {
+      continue
+    }
+
+    seen.add(key)
+    options.push(trimmed)
+  }
+
+  if (issue?.state) {
+    const key = stateKey(issue.state)
+    if (!seen.has(key)) {
+      options.push(issue.state)
+    }
+  }
+
+  return options
+}
+
+export function IssueForm({
+  action,
+  cancelHref,
+  defaultProject = "",
+  issue,
+  submitLabel = "Create issue",
+  workflowStates = WORKFLOW_STATES,
+}: IssueFormProps) {
+  const project = issue?.project ?? defaultProject
+  const formAction = action ?? createIssueAction
+  const resolvedCancelHref = cancelHref ?? boardHref(project)
+  const states = stateOptions(issue, workflowStates)
+
   return (
-    <form action={createIssueAction} className="flex flex-col gap-5">
+    <form action={formAction} className="flex flex-col gap-5">
       <section className="grid gap-4 rounded-md border border-border bg-card p-4 text-card-foreground md:grid-cols-2">
         <Field id="issue-project" label="Project">
           <input
             autoComplete="off"
             className={fieldClassName()}
-            defaultValue={defaultProject}
+            defaultValue={project}
             id="issue-project"
             name="project"
             placeholder="radial"
+            readOnly={Boolean(issue)}
             required
           />
         </Field>
         <Field id="issue-state" label="State">
           <select
             className={fieldClassName()}
-            defaultValue="Todo"
+            defaultValue={issue?.state ?? "Todo"}
             id="issue-state"
             name="state"
             required
           >
-            {WORKFLOW_STATES.map((state) => (
+            {states.map((state) => (
               <option key={state} value={state}>
                 {state}
               </option>
@@ -77,6 +135,7 @@ export function IssueForm({ defaultProject = "" }: IssueFormProps) {
           <Field id="issue-title" label="Title">
             <input
               className={fieldClassName("w-full")}
+              defaultValue={issue?.title ?? ""}
               id="issue-title"
               name="title"
               placeholder="Short, actionable issue title"
@@ -88,6 +147,7 @@ export function IssueForm({ defaultProject = "" }: IssueFormProps) {
           <Field id="issue-description" label="Description">
             <textarea
               className={fieldClassName("min-h-36 w-full resize-y")}
+              defaultValue={issue?.description ?? ""}
               id="issue-description"
               name="description"
               placeholder="Context, expected outcome, constraints, and useful links"
@@ -100,6 +160,7 @@ export function IssueForm({ defaultProject = "" }: IssueFormProps) {
         <Field id="issue-priority" label="Priority">
           <input
             className={fieldClassName()}
+            defaultValue={issue?.priority ?? ""}
             id="issue-priority"
             inputMode="numeric"
             name="priority"
@@ -111,6 +172,7 @@ export function IssueForm({ defaultProject = "" }: IssueFormProps) {
           <input
             autoComplete="off"
             className={fieldClassName()}
+            defaultValue={issue?.assignee ?? ""}
             id="issue-assignee"
             name="assignee"
             placeholder="agent or user id"
@@ -123,6 +185,7 @@ export function IssueForm({ defaultProject = "" }: IssueFormProps) {
         >
           <input
             className={fieldClassName()}
+            defaultValue={issue?.labels.join(", ") ?? ""}
             id="issue-labels"
             name="labels"
             placeholder="api, urgent"
@@ -135,15 +198,24 @@ export function IssueForm({ defaultProject = "" }: IssueFormProps) {
         >
           <input
             className={fieldClassName()}
+            defaultValue={blockerValue(issue)}
             id="issue-blocked-by"
             name="blocked_by"
             placeholder="issue-id-1, issue-id-2"
           />
+          {issue ? (
+            <input
+              defaultValue={blockerMetadataValue(issue)}
+              name="blocked_by_metadata"
+              type="hidden"
+            />
+          ) : null}
         </Field>
         <Field id="issue-branch" label="Branch">
           <input
             autoComplete="off"
             className={fieldClassName()}
+            defaultValue={issue?.branch_name ?? ""}
             id="issue-branch"
             name="branch_name"
             placeholder="codex/new-workflow"
@@ -152,6 +224,7 @@ export function IssueForm({ defaultProject = "" }: IssueFormProps) {
         <Field id="issue-url" label="URL">
           <input
             className={fieldClassName()}
+            defaultValue={issue?.url ?? ""}
             id="issue-url"
             name="url"
             placeholder="https://example.com/spec"
@@ -163,11 +236,11 @@ export function IssueForm({ defaultProject = "" }: IssueFormProps) {
       <div className="flex flex-wrap justify-end gap-2">
         <Link
           className={cn(buttonVariants({ variant: "outline" }))}
-          href={boardHref(defaultProject)}
+          href={resolvedCancelHref}
         >
           Cancel
         </Link>
-        <Button type="submit">Create issue</Button>
+        <Button type="submit">{submitLabel}</Button>
       </div>
     </form>
   )

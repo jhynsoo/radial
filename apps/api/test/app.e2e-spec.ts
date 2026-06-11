@@ -297,6 +297,326 @@ describe("AppController (e2e)", () => {
       })
   })
 
+  it("implements team workflow state catalog operations", async () => {
+    await request(app.getHttpServer())
+      .post("/api/v1/teams")
+      .send({
+        key: "rad",
+        name: "Radial Team",
+      })
+      .expect(201)
+      .expect((response) => {
+        const body = response.body as {
+          team: {
+            key: string
+            name: string
+            workflow_states: Array<{ name: string }>
+          }
+        }
+
+        expect(body.team.key).toBe("RAD")
+        expect(body.team.name).toBe("Radial Team")
+        expect(
+          body.team.workflow_states.some((state) => state.name === "Todo")
+        ).toBe(true)
+      })
+
+    await request(app.getHttpServer())
+      .get("/api/v1/teams")
+      .expect(200)
+      .expect((response) => {
+        const body = response.body as {
+          teams: Array<{ key: string }>
+        }
+
+        expect(body.teams.map((team) => team.key)).toEqual(["RAD"])
+      })
+
+    await request(app.getHttpServer())
+      .put("/api/v1/teams/RAD/workflow-states")
+      .send({
+        states: [
+          { name: "Todo", type: "unstarted" },
+          { name: "QA Review", type: "started" },
+          { name: "Done", type: "completed" },
+        ],
+      })
+      .expect(200)
+      .expect((response) => {
+        const body = response.body as {
+          states: Array<{ name: string; type: string }>
+        }
+
+        expect(
+          body.states.map((state) => `${state.name}:${state.type}`)
+        ).toEqual(["Todo:unstarted", "QA Review:started", "Done:completed"])
+      })
+
+    const issue = await createIssue({
+      project: "radial",
+      title: "Move through custom workflow",
+      state_name: "Todo",
+    })
+
+    await request(app.getHttpServer())
+      .patch(`/api/v1/issues/${issue.id}`)
+      .send({
+        state: "QA Review",
+      })
+      .expect(200)
+      .expect((response) => {
+        expect((response.body as IssueResponse).issue.state).toBe("QA Review")
+      })
+  })
+
+  it("implements project, milestone, and cycle catalog operations", async () => {
+    await request(app.getHttpServer())
+      .post("/api/v1/teams")
+      .send({
+        key: "rad",
+        name: "Radial Team",
+      })
+      .expect(201)
+
+    const project = await request(app.getHttpServer())
+      .post("/api/v1/projects")
+      .send({
+        slug: " radial-api ",
+        name: " Radial API ",
+        description: " Project metadata ",
+        status: "planned",
+      })
+      .expect(201)
+      .expect((response) => {
+        const body = response.body as {
+          project: {
+            slug: string
+            name: string
+            description: string | null
+            status: string
+          }
+        }
+
+        expect(body.project).toMatchObject({
+          slug: "radial-api",
+          name: "Radial API",
+          description: "Project metadata",
+          status: "planned",
+        })
+      })
+    const projectSlug = (project.body as { project: { slug: string } }).project
+      .slug
+
+    await request(app.getHttpServer())
+      .get("/api/v1/projects")
+      .expect(200)
+      .expect((response) => {
+        expect(response.body).toEqual({
+          projects: [expect.objectContaining({ slug: projectSlug })],
+        })
+      })
+
+    const view = await request(app.getHttpServer())
+      .post(`/api/v1/projects/${projectSlug}/views`)
+      .send({
+        name: " My work ",
+        filters: {
+          query: " API ",
+          states: ["Todo"],
+          assignee: " me ",
+          labels: ["Backend", "backend"],
+        },
+        display_options: {
+          layout: "kanban",
+          group_by: "state",
+          sort_by: "priority",
+          show_empty_states: false,
+        },
+      })
+      .expect(201)
+      .expect((response) => {
+        const body = response.body as {
+          view: {
+            project_slug: string
+            name: string
+            filters: {
+              query: string | null
+              states: string[]
+              assignee: string | null
+              labels: string[]
+            }
+            display_options: {
+              sort_by: string
+              show_empty_states: boolean
+            }
+          }
+        }
+
+        expect(body.view).toMatchObject({
+          project_slug: projectSlug,
+          name: "My work",
+          filters: {
+            query: "API",
+            states: ["Todo"],
+            assignee: "me",
+            labels: ["backend"],
+          },
+          display_options: {
+            sort_by: "priority",
+            show_empty_states: false,
+          },
+        })
+      })
+    const viewId = (view.body as { view: { id: string } }).view.id
+
+    await request(app.getHttpServer())
+      .get(`/api/v1/projects/${projectSlug}/views`)
+      .expect(200)
+      .expect((response) => {
+        expect(response.body).toEqual({
+          views: [expect.objectContaining({ id: viewId })],
+        })
+      })
+
+    await request(app.getHttpServer())
+      .patch(`/api/v1/views/${viewId}`)
+      .send({
+        name: "Backend review",
+        filters: {
+          query: null,
+          states: ["Human Review"],
+          assignee: null,
+          labels: ["api"],
+        },
+        display_options: {
+          layout: "kanban",
+          group_by: "state",
+          sort_by: "updated_at",
+          show_empty_states: true,
+        },
+      })
+      .expect(200)
+      .expect((response) => {
+        const body = response.body as {
+          view: {
+            name: string
+            filters: { states: string[] }
+            display_options: { show_empty_states: boolean }
+          }
+        }
+
+        expect(body.view.name).toBe("Backend review")
+        expect(body.view.filters.states).toEqual(["Human Review"])
+        expect(body.view.display_options.show_empty_states).toBe(true)
+      })
+
+    await request(app.getHttpServer())
+      .delete(`/api/v1/views/${viewId}`)
+      .expect(200)
+      .expect((response) => {
+        const body = response.body as { view: { id: string } }
+
+        expect(body.view.id).toBe(viewId)
+      })
+
+    await request(app.getHttpServer())
+      .get(`/api/v1/projects/${projectSlug}/views`)
+      .expect(200)
+      .expect({ views: [] })
+
+    const milestone = await request(app.getHttpServer())
+      .post(`/api/v1/projects/${projectSlug}/milestones`)
+      .send({
+        name: " API parity ",
+        description: " Linear-like API coverage ",
+        target_date: "2026-07-01T00:00:00.000Z",
+      })
+      .expect(201)
+      .expect((response) => {
+        const body = response.body as {
+          milestone: {
+            project_slug: string
+            name: string
+            target_date: string | null
+          }
+        }
+
+        expect(body.milestone).toMatchObject({
+          project_slug: projectSlug,
+          name: "API parity",
+          target_date: "2026-07-01T00:00:00.000Z",
+        })
+      })
+    const milestoneId = (milestone.body as { milestone: { id: string } })
+      .milestone.id
+
+    await request(app.getHttpServer())
+      .get(`/api/v1/projects/${projectSlug}/milestones`)
+      .expect(200)
+      .expect((response) => {
+        expect(response.body).toEqual({
+          milestones: [expect.objectContaining({ id: milestoneId })],
+        })
+      })
+
+    const cycle = await request(app.getHttpServer())
+      .post("/api/v1/teams/RAD/cycles")
+      .send({
+        name: " Sprint 1 ",
+        starts_at: "2026-06-01T00:00:00.000Z",
+        ends_at: "2026-06-14T00:00:00.000Z",
+      })
+      .expect(201)
+      .expect((response) => {
+        const body = response.body as {
+          cycle: {
+            team_key: string
+            name: string
+            starts_at: string
+            ends_at: string
+          }
+        }
+
+        expect(body.cycle).toMatchObject({
+          team_key: "RAD",
+          name: "Sprint 1",
+          starts_at: "2026-06-01T00:00:00.000Z",
+          ends_at: "2026-06-14T00:00:00.000Z",
+        })
+      })
+    const cycleId = (cycle.body as { cycle: { id: string } }).cycle.id
+
+    await request(app.getHttpServer())
+      .get("/api/v1/teams/RAD/cycles")
+      .expect(200)
+      .expect((response) => {
+        expect(response.body).toEqual({
+          cycles: [expect.objectContaining({ id: cycleId })],
+        })
+      })
+
+    const issue = await createIssue({
+      project: projectSlug,
+      title: "Schedule API work",
+    })
+
+    await request(app.getHttpServer())
+      .patch(`/api/v1/issues/${issue.id}`)
+      .send({
+        milestone_id: milestoneId,
+        cycle_id: cycleId,
+      })
+      .expect(200)
+      .expect((response) => {
+        expect((response.body as IssueResponse).issue).toEqual(
+          expect.objectContaining({
+            milestone_id: milestoneId,
+            cycle_id: cycleId,
+          })
+        )
+      })
+  })
+
   it("distinguishes authentication failures when an API key is configured", async () => {
     process.env.TRACKER_API_KEY = "secret"
 

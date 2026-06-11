@@ -1,23 +1,59 @@
 import {
   stateKey,
   WORKFLOW_STATES,
-  type WorkflowState,
 } from "../tracker/constants"
 import type { NormalizedIssue } from "../tracker/types"
 
-export type IssuesByState = Record<WorkflowState, NormalizedIssue[]>
+export type IssuesByState = Record<string, NormalizedIssue[]>
+export type IssueSortKey =
+  | "created_at"
+  | "updated_at"
+  | "priority"
+  | "identifier"
 
-export function groupIssuesByState(issues: NormalizedIssue[]): IssuesByState {
+export type IssueFilterOptions = {
+  query?: string
+  assignee?: string
+  label?: string
+  sort?: IssueSortKey
+}
+
+export function normalizeWorkflowStates(
+  workflowStates: readonly string[] = WORKFLOW_STATES
+): string[] {
+  const seen = new Set<string>()
+  const normalizedStates: string[] = []
+
+  for (const state of workflowStates) {
+    const trimmed = state.trim()
+    const key = stateKey(trimmed)
+
+    if (!trimmed || seen.has(key)) {
+      continue
+    }
+
+    seen.add(key)
+    normalizedStates.push(trimmed)
+  }
+
+  return normalizedStates.length > 0 ? normalizedStates : [...WORKFLOW_STATES]
+}
+
+export function groupIssuesByState(
+  issues: NormalizedIssue[],
+  workflowStates: readonly string[] = WORKFLOW_STATES
+): IssuesByState {
+  const stateList = normalizeWorkflowStates(workflowStates)
   const grouped = Object.fromEntries(
-    WORKFLOW_STATES.map((state) => [state, [] as NormalizedIssue[]])
-  ) as IssuesByState
+    stateList.map((state) => [state, [] as NormalizedIssue[]])
+  )
 
   for (const issue of issues) {
-    const matchedState = WORKFLOW_STATES.find(
+    const matchedState = stateList.find(
       (state) => stateKey(state) === stateKey(issue.state)
     )
     if (matchedState) {
-      grouped[matchedState].push(issue)
+      grouped[matchedState]?.push(issue)
     }
   }
 
@@ -26,33 +62,113 @@ export function groupIssuesByState(issues: NormalizedIssue[]): IssuesByState {
 
 export function filterIssues(
   issues: NormalizedIssue[],
-  query: string
+  filters: string | IssueFilterOptions
 ): NormalizedIssue[] {
-  const normalizedQuery = query.trim().toLowerCase()
-  if (!normalizedQuery) {
+  const options = typeof filters === "string" ? { query: filters } : filters
+  const normalizedQuery = options.query?.trim().toLowerCase() ?? ""
+  const normalizedAssignee = options.assignee?.trim().toLowerCase() ?? ""
+  const normalizedLabel = options.label?.trim().toLowerCase() ?? ""
+
+  const filtered = issues.filter((issue) => {
+    if (normalizedAssignee) {
+      const assignee = issue.assignee?.trim().toLowerCase() ?? ""
+      if (assignee !== normalizedAssignee) {
+        return false
+      }
+    }
+
+    if (normalizedLabel) {
+      const hasLabel = issue.labels.some(
+        (label) => label.trim().toLowerCase() === normalizedLabel
+      )
+      if (!hasLabel) {
+        return false
+      }
+    }
+
+    if (normalizedQuery) {
+      const searchable = [
+        issue.identifier,
+        issue.title,
+        issue.description ?? "",
+        ...issue.labels,
+      ]
+        .join(" ")
+        .toLowerCase()
+
+      return searchable.includes(normalizedQuery)
+    }
+
+    return true
+  })
+
+  return sortIssues(filtered, options.sort)
+}
+
+function sortIssues(
+  issues: NormalizedIssue[],
+  sort: IssueSortKey | undefined
+): NormalizedIssue[] {
+  if (!sort) {
     return issues
   }
 
-  return issues.filter((issue) => {
-    const searchable = [
-      issue.identifier,
-      issue.title,
-      issue.description ?? "",
-      ...issue.labels,
-    ]
-      .join(" ")
-      .toLowerCase()
+  return [...issues].sort((left, right) => {
+    if (sort === "identifier") {
+      return left.identifier.localeCompare(right.identifier, undefined, {
+        numeric: true,
+      })
+    }
 
-    return searchable.includes(normalizedQuery)
+    if (sort === "priority") {
+      return compareNullableNumber(left.priority, right.priority)
+    }
+
+    return compareNullableDateDesc(left[sort], right[sort])
   })
+}
+
+function compareNullableNumber(
+  left: number | null,
+  right: number | null
+): number {
+  if (left === null && right === null) {
+    return 0
+  }
+  if (left === null) {
+    return 1
+  }
+  if (right === null) {
+    return -1
+  }
+
+  return left - right
+}
+
+function compareNullableDateDesc(
+  left: string | null,
+  right: string | null
+): number {
+  if (left === null && right === null) {
+    return 0
+  }
+  if (left === null) {
+    return 1
+  }
+  if (right === null) {
+    return -1
+  }
+
+  return new Date(right).getTime() - new Date(left).getTime()
 }
 
 export function findIssueColumn(
   columns: IssuesByState,
-  issueId: string
-): WorkflowState | null {
-  for (const state of WORKFLOW_STATES) {
-    if (columns[state].some((issue) => issue.id === issueId)) {
+  issueId: string,
+  workflowStates: readonly string[] = WORKFLOW_STATES
+): string | null {
+  for (const state of normalizeWorkflowStates(workflowStates)) {
+    if ((columns[state] ?? []).some((issue) => issue.id === issueId)) {
       return state
     }
   }
@@ -63,25 +179,28 @@ export function findIssueColumn(
 export function updateIssueStateInColumns(
   columns: IssuesByState,
   issueId: string,
-  nextState: WorkflowState
+  nextState: string,
+  workflowStates: readonly string[] = WORKFLOW_STATES
 ): IssuesByState {
+  const stateList = normalizeWorkflowStates(workflowStates)
   const updated = Object.fromEntries(
-    WORKFLOW_STATES.map((state) => [state, [] as NormalizedIssue[]])
-  ) as IssuesByState
+    stateList.map((state) => [state, [] as NormalizedIssue[]])
+  )
   let movedIssue: NormalizedIssue | null = null
 
-  for (const state of WORKFLOW_STATES) {
-    for (const issue of columns[state]) {
+  for (const state of stateList) {
+    for (const issue of columns[state] ?? []) {
       if (issue.id === issueId) {
         movedIssue = { ...issue, state: nextState }
       } else {
-        updated[state].push({ ...issue })
+        updated[state]?.push({ ...issue })
       }
     }
   }
 
-  if (movedIssue) {
-    updated[nextState].push(movedIssue)
+  const nextColumn = updated[nextState]
+  if (movedIssue && nextColumn) {
+    nextColumn.push(movedIssue)
   }
 
   return updated
@@ -89,16 +208,17 @@ export function updateIssueStateInColumns(
 
 export function restoreCanonicalColumnOrder(
   columns: IssuesByState,
-  sourceIssues: NormalizedIssue[]
+  sourceIssues: NormalizedIssue[],
+  workflowStates: readonly string[] = WORKFLOW_STATES
 ): IssuesByState {
   const issueOrder = new Map(
     sourceIssues.map((issue, index) => [issue.id, index] as const)
   )
 
   return Object.fromEntries(
-    WORKFLOW_STATES.map((state) => [
+    normalizeWorkflowStates(workflowStates).map((state) => [
       state,
-      [...columns[state]].sort(
+      [...(columns[state] ?? [])].sort(
         (left, right) =>
           (issueOrder.get(left.id) ?? Number.MAX_SAFE_INTEGER) -
           (issueOrder.get(right.id) ?? Number.MAX_SAFE_INTEGER)
@@ -110,7 +230,7 @@ export function restoreCanonicalColumnOrder(
 export function moveIssueState(
   issues: NormalizedIssue[],
   issueId: string,
-  state: WorkflowState
+  state: string
 ): NormalizedIssue[] {
   return issues.map((issue) =>
     issue.id === issueId ? { ...issue, state } : issue
