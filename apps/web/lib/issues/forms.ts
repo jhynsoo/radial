@@ -1,4 +1,9 @@
-import type { CreateIssueBody, RelationType } from "../tracker/types"
+import type {
+  CreateIssueBody,
+  IssueBlocker,
+  RelationType,
+  UpdateIssueBody,
+} from "../tracker/types"
 
 function text(formData: FormData, key: string): string {
   const value = formData.get(key)
@@ -20,10 +25,59 @@ function commaList(value: string): string[] {
     .filter(Boolean)
 }
 
-function optionalText(
-  formData: FormData,
-  key: string
-): string | undefined {
+function readBlockerMetadata(formData: FormData): Map<string, IssueBlocker> {
+  const value = text(formData, "blocked_by_metadata")
+  const metadata = new Map<string, IssueBlocker>()
+
+  if (!value) {
+    return metadata
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(value)
+
+    if (!Array.isArray(parsed)) {
+      return metadata
+    }
+
+    for (const item of parsed) {
+      if (typeof item !== "object" || item === null || Array.isArray(item)) {
+        continue
+      }
+
+      const blocker = item as Record<string, unknown>
+      const id = typeof blocker.id === "string" ? blocker.id.trim() : ""
+      const identifier =
+        typeof blocker.identifier === "string" ? blocker.identifier.trim() : ""
+      const state =
+        typeof blocker.state === "string" ? blocker.state.trim() : ""
+
+      if (!id) {
+        continue
+      }
+
+      metadata.set(id, {
+        id,
+        identifier: identifier || id,
+        state: state || null,
+      })
+    }
+  } catch {
+    return metadata
+  }
+
+  return metadata
+}
+
+function blockerList(formData: FormData): Array<string | IssueBlocker> {
+  const metadata = readBlockerMetadata(formData)
+
+  return commaList(text(formData, "blocked_by")).map(
+    (blockerId) => metadata.get(blockerId) ?? blockerId
+  )
+}
+
+function optionalText(formData: FormData, key: string): string | undefined {
   const value = text(formData, key)
   return value || undefined
 }
@@ -57,7 +111,7 @@ function validateUrl(url: string): string {
 
 export function parseIssueForm(formData: FormData): CreateIssueBody {
   const labels = commaList(text(formData, "labels"))
-  const blockedBy = commaList(text(formData, "blocked_by"))
+  const blockedBy = blockerList(formData)
   const body: CreateIssueBody = {
     project: required(formData, "project", "Project"),
     title: required(formData, "title", "Title"),
@@ -90,6 +144,24 @@ export function parseIssueForm(formData: FormData): CreateIssueBody {
   }
 
   return body
+}
+
+export function parseIssueUpdateForm(formData: FormData): UpdateIssueBody {
+  const labels = commaList(text(formData, "labels"))
+  const blockedBy = blockerList(formData)
+  const url = optionalText(formData, "url")
+
+  return {
+    title: required(formData, "title", "Title"),
+    description: text(formData, "description") || null,
+    state: required(formData, "state", "State"),
+    priority: parsePriority(text(formData, "priority")),
+    labels,
+    blocked_by: blockedBy,
+    assignee: text(formData, "assignee") || null,
+    branch_name: text(formData, "branch_name") || null,
+    url: url ? validateUrl(url) : null,
+  }
 }
 
 export function parseCommentBody(formData: FormData): string {

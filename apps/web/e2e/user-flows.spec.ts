@@ -32,6 +32,22 @@ test("opens a project board, filters issues, and uses recent projects", async ({
   await expect(page.getByText("Fix API contract search")).toBeVisible()
   await expect(page.getByText("Plan board-first issue console")).toBeHidden()
 
+  await page.getByLabel("Assignee").fill("me")
+  await page.getByLabel("Label").fill("api")
+  await page.getByLabel("Sort").selectOption("priority")
+  await page.getByLabel("Show empty states").uncheck()
+  await page.getByRole("button", { name: "Search" }).click()
+
+  await expect(page).toHaveURL(/assignee=me/)
+  await expect(page).toHaveURL(/label=api/)
+  await expect(page).toHaveURL(/sort=priority/)
+  await expect(page).toHaveURL(/show_empty=false/)
+  await expect(page.getByText("Display")).toBeVisible()
+  await expect(page.getByText("Fix API contract search")).toBeVisible()
+  await expect(
+    page.getByRole("region", { name: "Backlog issue column" })
+  ).toBeHidden()
+
   await page.goto("/")
   await page.getByRole("button", { name: "radial" }).click()
 
@@ -160,6 +176,43 @@ test("opens an issue detail from the board card link", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "Fix API contract search" })
   ).toBeVisible()
+})
+
+test("edits issue fields and reflects the changes on detail and board", async ({
+  page,
+}) => {
+  await page.goto("/issues/issue-2")
+
+  await page.getByRole("link", { name: "Edit issue" }).click()
+  await expect(page).toHaveURL(/\/issues\/issue-2\/edit$/)
+
+  await expect(page.getByLabel("Project")).toHaveValue("radial")
+  await page.getByLabel("Title").fill("Updated API contract search")
+  await page.getByLabel("Description").fill("Updated detail copy")
+  await page.getByLabel("State").selectOption("Human Review")
+  await page.getByLabel("Priority").fill("4")
+  await page.getByLabel("Labels").fill("api, edited")
+  await page.getByLabel("Branch").fill("")
+  await page.getByLabel("URL").fill("https://example.com/updated")
+  await page.getByRole("button", { name: "Save issue" }).click()
+
+  await expect(page).toHaveURL(/\/issues\/issue-2$/)
+  await expect(
+    page.getByRole("heading", { name: "Updated API contract search" })
+  ).toBeVisible()
+  await expect(page.getByText("Updated detail copy")).toBeVisible()
+  await expect(issueHeader(page)).toContainText("Human Review")
+  await expect(page.getByText("P4")).toBeVisible()
+  await expect(page.getByText("edited")).toBeVisible()
+  await expect(page.getByText("None")).toBeVisible()
+  await expect(
+    page.getByRole("link", { name: "Source issue" })
+  ).toHaveAttribute("href", "https://example.com/updated")
+
+  await page.getByRole("link", { name: "Back to board" }).click()
+
+  await expect(page).toHaveURL(/project=radial/)
+  await expect(page.getByText("Updated API contract search")).toBeVisible()
 })
 
 test("moves an issue between board columns with drag and drop", async ({

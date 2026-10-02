@@ -20,6 +20,25 @@ export type ErrorCategory =
   | "tracker_relation_create_failed"
 
 export type RelationType = "related" | "blocked_by"
+export type WorkflowStateType =
+  | "backlog"
+  | "unstarted"
+  | "started"
+  | "completed"
+  | "canceled"
+export type ProjectStatus =
+  | "backlog"
+  | "planned"
+  | "in_progress"
+  | "completed"
+  | "canceled"
+export type IssueViewLayout = "kanban" | "list"
+export type IssueViewGroupBy = "state" | "assignee" | "priority"
+export type IssueViewSortBy =
+  | "created_at"
+  | "updated_at"
+  | "priority"
+  | "identifier"
 
 export interface TrackerErrorBody {
   error: {
@@ -43,6 +62,9 @@ export interface NormalizedIssue {
   state: string
   branch_name: string | null
   url: string | null
+  assignee: string | null
+  milestone_id: string | null
+  cycle_id: string | null
   labels: string[]
   blocked_by: IssueBlocker[]
   created_at: string | null
@@ -75,6 +97,79 @@ export interface IssueRelation {
   created_at: string
 }
 
+export interface IssueWorkflowState {
+  id: string
+  team_key: string
+  name: string
+  type: WorkflowStateType
+  position: number
+  created_at: string
+  updated_at: string
+}
+
+export interface IssueTeam {
+  key: string
+  name: string
+  description: string | null
+  created_at: string
+  updated_at: string
+  workflow_states: IssueWorkflowState[]
+}
+
+export interface IssueProject {
+  slug: string
+  name: string
+  description: string | null
+  status: ProjectStatus
+  created_at: string
+  updated_at: string
+}
+
+export interface IssueProjectMilestone {
+  id: string
+  project_slug: string
+  name: string
+  description: string | null
+  target_date: string | null
+  position: number
+  created_at: string
+  updated_at: string
+}
+
+export interface IssueCycle {
+  id: string
+  team_key: string
+  name: string
+  starts_at: string
+  ends_at: string
+  created_at: string
+  updated_at: string
+}
+
+export interface IssueViewFilters {
+  query: string | null
+  states: string[]
+  assignee: string | null
+  labels: string[]
+}
+
+export interface IssueViewDisplayOptions {
+  layout: IssueViewLayout
+  group_by: IssueViewGroupBy
+  sort_by: IssueViewSortBy
+  show_empty_states: boolean
+}
+
+export interface IssueView {
+  id: string
+  project_slug: string
+  name: string
+  filters: IssueViewFilters
+  display_options: IssueViewDisplayOptions
+  created_at: string
+  updated_at: string
+}
+
 export interface IssueDetail extends NormalizedIssue {
   project: string
   comments: IssueComment[]
@@ -96,6 +191,8 @@ export interface IssueRecord {
   blocked_by_ids: string[]
   external_blockers: IssueBlocker[]
   assignee: string | null
+  milestone_id: string | null
+  cycle_id: string | null
   created_at: string
   updated_at: string
   comments: IssueComment[]

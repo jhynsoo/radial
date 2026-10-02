@@ -148,6 +148,408 @@ describe("IssueTrackerService", () => {
     expect(await service.lookupIssues({ ids: [] })).toEqual([])
   })
 
+  it("creates teams with workflow states and registers custom states", async () => {
+    const team = await service.createTeam({
+      key: " rad ",
+      name: " Radial Team ",
+      description: " Automation queue ",
+    })
+
+    expect(team).toEqual(
+      expect.objectContaining({
+        key: "RAD",
+        name: "Radial Team",
+        description: "Automation queue",
+      })
+    )
+    expect(team.workflow_states.map((state) => state.name)).toEqual([
+      "Backlog",
+      "Todo",
+      "In Progress",
+      "Human Review",
+      "Merging",
+      "Rework",
+      "Done",
+      "Closed",
+      "Canceled",
+      "Duplicate",
+    ])
+    expect((await service.listTeams()).map((item) => item.key)).toEqual(["RAD"])
+
+    const states = await service.replaceWorkflowStates("RAD", {
+      states: [
+        { name: "Todo", type: "unstarted" },
+        { name: "QA Review", type: "started" },
+        { name: "Done", type: "completed" },
+      ],
+    })
+    expect(states.map((state) => `${state.name}:${state.type}`)).toEqual([
+      "Todo:unstarted",
+      "QA Review:started",
+      "Done:completed",
+    ])
+
+    const issue = await service.createIssue({
+      project: "radial",
+      title: "Needs QA",
+      state_name: "Todo",
+    })
+    expect(
+      (await service.updateIssue(issue.id, { state: "QA Review" })).state
+    ).toBe("QA Review")
+  })
+
+  it("loads persisted workflow states before validating state references", async () => {
+    const repository = new InMemoryIssueRepository()
+    const setupService = new IssueTrackerService(repository)
+
+    await setupService.createTeam({
+      key: "RAD",
+      name: "Radial Team",
+    })
+    await setupService.replaceWorkflowStates("RAD", {
+      states: [
+        { name: "Todo", type: "unstarted" },
+        { name: "QA Review", type: "started" },
+        { name: "Done", type: "completed" },
+      ],
+    })
+    const project = await setupService.createProject({
+      slug: "radial-api",
+      name: "Radial API",
+    })
+    const issue = await setupService.createIssue({
+      project: project.slug,
+      title: "Needs persisted QA",
+      state_name: "Todo",
+    })
+
+    const issueServiceAfterRestart = new IssueTrackerService(repository)
+    expect(
+      (await issueServiceAfterRestart.listWorkflowStates("RAD")).map(
+        (state) => state.name
+      )
+    ).toEqual(["Todo", "QA Review", "Done"])
+    expect(
+      (
+        await issueServiceAfterRestart.updateIssue(issue.id, {
+          state: "QA Review",
+        })
+      ).state
+    ).toBe("QA Review")
+
+    const viewServiceAfterRestart = new IssueTrackerService(repository)
+    const view = await viewServiceAfterRestart.createIssueView(project.slug, {
+      name: "QA board",
+      filters: {
+        states: ["QA Review"],
+      },
+    })
+
+    expect(view.filters.states).toEqual(["QA Review"])
+  })
+
+  it("rejects removing workflow states that are still used by issues", async () => {
+    await service.createTeam({
+      key: "RAD",
+      name: "Radial Team",
+    })
+    await service.replaceWorkflowStates("RAD", {
+      states: [
+        { name: "Todo", type: "unstarted" },
+        { name: "QA Review", type: "started" },
+        { name: "Done", type: "completed" },
+      ],
+    })
+    const issue = await service.createIssue({
+      project: "radial",
+      title: "Needs QA",
+      state_name: "QA Review",
+    })
+
+    await expectTrackerError(
+      () =>
+        service.replaceWorkflowStates("RAD", {
+          states: [
+            { name: "Todo", type: "unstarted" },
+            { name: "Done", type: "completed" },
+          ],
+        }),
+      "tracker_unknown_payload"
+    )
+
+    expect(
+      (
+        await service.searchIssues({
+          project: "radial",
+          states: ["QA Review"],
+        })
+      ).map((candidate) => candidate.id)
+    ).toEqual([issue.id])
+    expect(
+      (await service.listWorkflowStates("RAD")).map((state) => state.name)
+    ).toEqual(["Todo", "QA Review", "Done"])
+  })
+
+  it("clears removed workflow states from state validation", async () => {
+    const project = await service.createProject({
+      slug: "radial",
+      name: "Radial",
+    })
+    await service.createTeam({
+      key: "RAD",
+      name: "Radial Team",
+    })
+    await service.replaceWorkflowStates("RAD", {
+      states: [
+        { name: "Todo", type: "unstarted" },
+        { name: "QA Review", type: "started" },
+        { name: "Done", type: "completed" },
+      ],
+    })
+    const issue = await service.createIssue({
+      project: project.slug,
+      title: "Ready for work",
+      state_name: "Todo",
+    })
+
+    await service.replaceWorkflowStates("RAD", {
+      states: [
+        { name: "Todo", type: "unstarted" },
+        { name: "Done", type: "completed" },
+      ],
+    })
+
+    await expectTrackerError(
+      () => service.updateIssue(issue.id, { state: "QA Review" }),
+      "tracker_state_not_found"
+    )
+    await expectTrackerError(
+      () =>
+        service.createIssueView(project.slug, {
+          name: "QA board",
+          filters: {
+            states: ["QA Review"],
+          },
+        }),
+      "tracker_state_not_found"
+    )
+  })
+
+  it("creates projects, milestones, cycles, and links them to issues", async () => {
+    await service.createTeam({
+      key: "RAD",
+      name: "Radial Team",
+    })
+
+    const project = await service.createProject({
+      slug: " radial-api ",
+      name: " Radial API ",
+      description: " Project metadata ",
+      status: "planned",
+    })
+    expect(project).toEqual(
+      expect.objectContaining({
+        slug: "radial-api",
+        name: "Radial API",
+        description: "Project metadata",
+        status: "planned",
+      })
+    )
+    expect((await service.listProjects()).map((item) => item.slug)).toEqual([
+      "radial-api",
+    ])
+
+    const milestone = await service.createProjectMilestone(project.slug, {
+      name: " API parity ",
+      description: " Linear-like API coverage ",
+      target_date: "2026-07-01T00:00:00.000Z",
+    })
+    expect(await service.listProjectMilestones(project.slug)).toEqual([
+      expect.objectContaining({
+        id: milestone.id,
+        project_slug: project.slug,
+        name: "API parity",
+      }),
+    ])
+
+    const cycle = await service.createCycle("RAD", {
+      name: " Sprint 1 ",
+      starts_at: "2026-06-01T00:00:00.000Z",
+      ends_at: "2026-06-14T00:00:00.000Z",
+    })
+    expect(await service.listCycles("RAD")).toEqual([
+      expect.objectContaining({
+        id: cycle.id,
+        team_key: "RAD",
+        name: "Sprint 1",
+      }),
+    ])
+
+    const issue = await service.createIssue({
+      project: project.slug,
+      title: "Schedule API work",
+    })
+    const updated = await service.updateIssue(issue.id, {
+      milestone_id: milestone.id,
+      cycle_id: cycle.id,
+    })
+
+    expect(updated.milestone_id).toBe(milestone.id)
+    expect(updated.cycle_id).toBe(cycle.id)
+  })
+
+  it("creates, updates, and deletes saved issue views", async () => {
+    const project = await service.createProject({
+      slug: "radial-api",
+      name: "Radial API",
+    })
+
+    const view = await service.createIssueView(project.slug, {
+      name: " My work ",
+      filters: {
+        query: " API ",
+        states: ["Todo", "In Progress"],
+        assignee: " me ",
+        labels: ["Backend", " backend "],
+      },
+      display_options: {
+        layout: "kanban",
+        group_by: "state",
+        sort_by: "priority",
+        show_empty_states: false,
+      },
+    })
+
+    expect(view).toEqual(
+      expect.objectContaining({
+        project_slug: project.slug,
+        name: "My work",
+        filters: {
+          query: "API",
+          states: ["Todo", "In Progress"],
+          assignee: "me",
+          labels: ["backend"],
+        },
+        display_options: {
+          layout: "kanban",
+          group_by: "state",
+          sort_by: "priority",
+          show_empty_states: false,
+        },
+      })
+    )
+    expect(
+      (await service.listIssueViews(project.slug)).map((item) => item.id)
+    ).toEqual([view.id])
+
+    const updated = await service.updateIssueView(view.id, {
+      name: " Backend review ",
+      filters: {
+        query: null,
+        states: ["Human Review"],
+        assignee: null,
+        labels: ["api"],
+      },
+      display_options: {
+        layout: "kanban",
+        group_by: "state",
+        sort_by: "updated_at",
+        show_empty_states: true,
+      },
+    })
+
+    expect(updated.name).toBe("Backend review")
+    expect(updated.filters).toEqual({
+      query: null,
+      states: ["Human Review"],
+      assignee: null,
+      labels: ["api"],
+    })
+    expect(updated.display_options.show_empty_states).toBe(true)
+
+    await service.deleteIssueView(view.id)
+    expect(await service.listIssueViews(project.slug)).toEqual([])
+    await expectTrackerError(
+      () => service.updateIssueView(view.id, { name: "Missing" }),
+      "tracker_not_found"
+    )
+  })
+
+  it("preserves saved view settings omitted from partial updates", async () => {
+    const project = await service.createProject({
+      slug: "radial-api",
+      name: "Radial API",
+    })
+    const view = await service.createIssueView(project.slug, {
+      name: "Backend work",
+      filters: {
+        query: " API ",
+        states: ["Todo"],
+        assignee: " me ",
+        labels: ["Backend"],
+      },
+      display_options: {
+        layout: "kanban",
+        group_by: "state",
+        sort_by: "priority",
+        show_empty_states: false,
+      },
+    })
+
+    const updated = await service.updateIssueView(view.id, {
+      filters: {
+        states: ["Done"],
+      },
+      display_options: {
+        show_empty_states: true,
+      },
+    })
+
+    expect(updated.filters).toEqual({
+      query: "API",
+      states: ["Done"],
+      assignee: "me",
+      labels: ["backend"],
+    })
+    expect(updated.display_options).toEqual({
+      layout: "kanban",
+      group_by: "state",
+      sort_by: "priority",
+      show_empty_states: true,
+    })
+  })
+
+  it("rejects milestones from a different project when updating issues", async () => {
+    const project = await service.createProject({
+      slug: "radial-api",
+      name: "Radial API",
+    })
+    const otherProject = await service.createProject({
+      slug: "other-api",
+      name: "Other API",
+    })
+    const otherMilestone = await service.createProjectMilestone(
+      otherProject.slug,
+      {
+        name: "Other project milestone",
+      }
+    )
+    const issue = await service.createIssue({
+      project: project.slug,
+      title: "Schedule API work",
+    })
+
+    await expectTrackerError(
+      () =>
+        service.updateIssue(issue.id, {
+          milestone_id: otherMilestone.id,
+        }),
+      "tracker_not_found"
+    )
+    expect((await service.getIssue(issue.id)).milestone_id).toBeNull()
+  })
+
   it("resolves internal and external blockers with live internal state", async () => {
     const blocker = await service.createIssue({
       project: "radial",
@@ -215,7 +617,7 @@ describe("IssueTrackerService", () => {
     ).toBe("Human Review")
     await expectTrackerError(
       () => service.updateIssue(issue.id, {}),
-      "tracker_invalid_state_transition"
+      "tracker_unknown_payload"
     )
     await expectTrackerError(
       () =>
@@ -224,6 +626,67 @@ describe("IssueTrackerService", () => {
         }),
       "tracker_state_not_found"
     )
+  })
+
+  it("updates editable issue fields and replaces labels and blockers", async () => {
+    const blocker = await service.createIssue({
+      project: "radial",
+      title: "Dependency",
+      state_name: "Todo",
+    })
+    const issue = await service.createIssue({
+      project: "radial",
+      title: "Original title",
+      description: "Original description",
+      priority: 1,
+      state_name: "Todo",
+      labels: ["backend"],
+      branch_name: "feat/original",
+      url: "https://example.com/original",
+      assignee: "me",
+    })
+
+    const updated = await service.updateIssue(issue.id, {
+      title: " Updated title ",
+      description: null,
+      priority: null,
+      state_name: "in progress",
+      branch_name: null,
+      url: null,
+      labels: ["Web", " web ", "API"],
+      blocked_by: [blocker.id, { id: "external-1", identifier: "EXT-1" }],
+      assignee: null,
+    })
+
+    expect(updated).toEqual(
+      expect.objectContaining({
+        id: issue.id,
+        identifier: issue.identifier,
+        project: "radial",
+        title: "Updated title",
+        description: null,
+        priority: null,
+        state: "In Progress",
+        branch_name: null,
+        url: null,
+        labels: ["web", "api"],
+        comments: [],
+        links: [],
+        relations: [],
+      })
+    )
+    expect(updated.blocked_by).toEqual([
+      {
+        id: blocker.id,
+        identifier: blocker.identifier,
+        state: "Todo",
+      },
+      {
+        id: "external-1",
+        identifier: "EXT-1",
+        state: null,
+      },
+    ])
   })
 
   it("creates, updates, resolves, and filters comments", async () => {
@@ -485,6 +948,32 @@ describe("IssueTrackerService", () => {
         }),
       "tracker_unknown_payload"
     )
+    const issue = await service.createIssue({
+      project: "radial",
+      title: "Editable issue",
+    })
+    await expectTrackerError(
+      () =>
+        service.updateIssue(issue.id, {
+          title: " ",
+        }),
+      "tracker_issue_create_failed"
+    )
+    await expectTrackerError(
+      () =>
+        service.updateIssue(issue.id, {
+          labels: ["backend", 1],
+        }),
+      "tracker_unknown_payload"
+    )
+    await expectTrackerError(
+      () =>
+        service.updateIssue(issue.id, {
+          state_name: "Done",
+          state: "Missing",
+        }),
+      "tracker_state_not_found"
+    )
   })
 })
 
@@ -521,7 +1010,25 @@ function repositoryWithWriteMisses(): IssueRepository {
   })
 
   return {
+    listProjects: jest.fn().mockResolvedValue([]),
+    findProjectBySlug: jest.fn().mockResolvedValue(null),
+    createProject: jest.fn(),
+    listProjectMilestones: jest.fn().mockResolvedValue([]),
+    createProjectMilestone: jest.fn().mockResolvedValue(null),
+    listCycles: jest.fn().mockResolvedValue([]),
+    createCycle: jest.fn().mockResolvedValue(null),
+    listIssueViews: jest.fn().mockResolvedValue([]),
+    findIssueViewById: jest.fn().mockResolvedValue(null),
+    createIssueView: jest.fn().mockResolvedValue(null),
+    updateIssueView: jest.fn().mockResolvedValue(null),
+    deleteIssueView: jest.fn().mockResolvedValue(false),
     searchIssues: jest.fn().mockResolvedValue([]),
+    listTeams: jest.fn().mockResolvedValue([]),
+    findTeamByKey: jest.fn().mockResolvedValue(null),
+    createTeam: jest.fn(),
+    listWorkflowStates: jest.fn().mockResolvedValue([]),
+    replaceWorkflowStates: jest.fn().mockResolvedValue(null),
+    findIssueStatesInUse: jest.fn().mockResolvedValue([]),
     findIssuesByIds: jest.fn().mockResolvedValue([]),
     findIssueById: jest.fn((issueId: string) =>
       Promise.resolve(
@@ -530,6 +1037,7 @@ function repositoryWithWriteMisses(): IssueRepository {
     ),
     issueExists: jest.fn().mockResolvedValue(false),
     createIssue: jest.fn((issue) => Promise.resolve(issueRecord(issue))),
+    updateIssue: jest.fn().mockResolvedValue(null),
     updateIssueState: jest.fn().mockResolvedValue(null),
     createComment: jest.fn().mockResolvedValue(null),
     updateComment: jest.fn().mockResolvedValue(null),
@@ -541,7 +1049,25 @@ function repositoryWithWriteMisses(): IssueRepository {
 
 function repositoryWithIssue(issue: IssueRecord): IssueRepository {
   return {
+    listProjects: jest.fn().mockResolvedValue([]),
+    findProjectBySlug: jest.fn().mockResolvedValue(null),
+    createProject: jest.fn(),
+    listProjectMilestones: jest.fn().mockResolvedValue([]),
+    createProjectMilestone: jest.fn().mockResolvedValue(null),
+    listCycles: jest.fn().mockResolvedValue([]),
+    createCycle: jest.fn().mockResolvedValue(null),
+    listIssueViews: jest.fn().mockResolvedValue([]),
+    findIssueViewById: jest.fn().mockResolvedValue(null),
+    createIssueView: jest.fn().mockResolvedValue(null),
+    updateIssueView: jest.fn().mockResolvedValue(null),
+    deleteIssueView: jest.fn().mockResolvedValue(false),
     searchIssues: jest.fn().mockResolvedValue([issue]),
+    listTeams: jest.fn().mockResolvedValue([]),
+    findTeamByKey: jest.fn().mockResolvedValue(null),
+    createTeam: jest.fn(),
+    listWorkflowStates: jest.fn().mockResolvedValue([]),
+    replaceWorkflowStates: jest.fn().mockResolvedValue([]),
+    findIssueStatesInUse: jest.fn().mockResolvedValue([]),
     findIssuesByIds: jest.fn((ids: string[]) =>
       Promise.resolve(ids.includes(issue.id) ? [issue] : [])
     ),
@@ -552,6 +1078,7 @@ function repositoryWithIssue(issue: IssueRecord): IssueRepository {
       Promise.resolve(issueId === issue.id)
     ),
     createIssue: jest.fn((created) => Promise.resolve(issueRecord(created))),
+    updateIssue: jest.fn().mockResolvedValue(issue),
     updateIssueState: jest.fn().mockResolvedValue(issue),
     createComment: jest.fn().mockResolvedValue(null),
     updateComment: jest.fn().mockResolvedValue(null),
@@ -576,6 +1103,8 @@ function issueRecord(overrides: Partial<IssueRecord> = {}): IssueRecord {
     blocked_by_ids: [],
     external_blockers: [],
     assignee: null,
+    milestone_id: null,
+    cycle_id: null,
     created_at: "2026-05-12T00:00:00.000Z",
     updated_at: "2026-05-12T00:00:00.000Z",
     comments: [],

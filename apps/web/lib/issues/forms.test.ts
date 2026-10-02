@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   parseCommentBody,
   parseIssueForm,
+  parseIssueUpdateForm,
   parseLinkForm,
   parseRelationForm,
 } from "./forms"
@@ -89,6 +90,63 @@ describe("issue form parsing", () => {
       state: "Todo",
       priority: null,
     })
+  })
+
+  it("parses an issue update form with explicit clears", () => {
+    const formData = new FormData()
+    formData.set("title", " Updated title ")
+    formData.set("description", " ")
+    formData.set("state", "In Progress")
+    formData.set("priority", "")
+    formData.set("labels", " web, api ")
+    formData.set("blocked_by", " ")
+    formData.set("assignee", " ")
+    formData.set("branch_name", " ")
+    formData.set("url", " ")
+
+    expect(parseIssueUpdateForm(formData)).toEqual({
+      title: "Updated title",
+      description: null,
+      state: "In Progress",
+      priority: null,
+      labels: ["web", "api"],
+      blocked_by: [],
+      assignee: null,
+      branch_name: null,
+      url: null,
+    })
+  })
+
+  it("preserves existing external blocker metadata on issue updates", () => {
+    const formData = new FormData()
+    formData.set("title", " Updated title ")
+    formData.set("description", " Keep blockers ")
+    formData.set("state", "Todo")
+    formData.set("priority", "1")
+    formData.set("labels", "web")
+    formData.set("blocked_by", " external-1, new-external ")
+    formData.set("assignee", "me")
+    formData.set("branch_name", "feat/edit")
+    formData.set("url", "https://example.com")
+    formData.set(
+      "blocked_by_metadata",
+      JSON.stringify([
+        {
+          id: "external-1",
+          identifier: "EXT-1",
+          state: "Blocked",
+        },
+      ])
+    )
+
+    expect(parseIssueUpdateForm(formData).blocked_by).toEqual([
+      {
+        id: "external-1",
+        identifier: "EXT-1",
+        state: "Blocked",
+      },
+      "new-external",
+    ])
   })
 
   it("parses comment, link, and relation forms", () => {
